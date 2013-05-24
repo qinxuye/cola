@@ -2,3 +2,7 @@
 .project
 .pydevproject
 .settings/*
+master/*
+worker/*
+master/
+worker/

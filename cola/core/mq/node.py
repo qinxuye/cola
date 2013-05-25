@@ -181,6 +181,7 @@ class Node(object):
                 
                 if pos1 + pos2 + 2 < self.NODE_FILE_SIZE:
                     m1[:pos1+pos2+2] = m1[:pos1+1] + m2[:pos2+1]
+                    m1.flush()
                             
                     self._remove_handles(f_path2)
                     self.map_files.remove(f_path2)

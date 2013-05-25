@@ -10,4 +10,7 @@ import SocketServer
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 
 class ColaRPCServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
-    pass
+    
+    def __init__(self, *args, **kwargs):
+        SimpleXMLRPCServer.__init__(self, *args, **kwargs)
+        self.allow_none = True

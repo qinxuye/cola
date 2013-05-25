@@ -75,7 +75,7 @@ class Node(object):
             else:
                 self.old_files.append(file_path)
                 
-        self.old_files = sorted(self.old_files, key=lambda k: int(os.path.split(k)[1].split('.')[0]))
+        self.old_files = sorted(self.old_files, key=lambda k: int(os.path.split(k)[1].rsplit('.', 1)[0]))
         self.map_files = [f.rsplit('.', 1)[0] for f in self.old_files]
         
     def map(self):

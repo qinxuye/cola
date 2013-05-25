@@ -10,7 +10,6 @@ import urllib2
 import cookielib
 
 from cola.core.errors import DependencyNotInstalledError
-from cola.core.config import main_conf
 
 class Opener(object):
     def open(self, url):
@@ -29,11 +28,14 @@ class BuiltinOpener(Opener):
         return urllib2.urlopen(url).read()
     
 class MechanizeOpener(Opener):
-    def __init__(self, cookie_filename=None):
+    def __init__(self, cookie_filename=None, user_agent=None):
         try:
             import mechanize
         except ImportError:
             raise DependencyNotInstalledError('mechanize')
+        
+        if user_agent is None:
+            user_agent = 'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)'
         
         self.browser = mechanize.Browser()
         
@@ -46,7 +48,7 @@ class MechanizeOpener(Opener):
         self.browser.set_handle_referer(True)
         self.browser.set_handle_robots(False)
         self.browser.addheaders = [
-            ('User-agent', main_conf['opener']['user-agent'])]
+            ('User-agent', user_agent)]
         
     def open(self, url):
         return self.browser.open(url).read()

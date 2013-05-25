@@ -6,9 +6,12 @@ Created on 2013-5-16
 @author: Chine
 '''
 
-import os
+from cola.core.errors import DependencyNotInstalledError
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    raise DependencyNotInstalledError('pyyaml')
 
 class PropertyObject(dict): 
     def __getattr__(self, name):
@@ -24,7 +27,10 @@ class PropertyObject(dict):
 
 class Config(object):
     def __init__(self, yaml_file):
-        f = open(yaml_file)
+        if isinstance(yaml_file, str):
+            f = open(yaml_file)
+        else:
+            f = yaml_file
         try:
             self.conf = PropertyObject(yaml.load(f))
         finally:
@@ -35,9 +41,3 @@ class Config(object):
     
     def __getitem__(self, name):
         return getattr(self.conf, name)
-    
-conf_base_path = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'conf')
-conf_path = lambda name: os.path.join(conf_base_path, name)
-
-main_conf = Config(conf_path('main.yaml'))

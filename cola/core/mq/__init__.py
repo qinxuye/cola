@@ -8,7 +8,6 @@ Created on 2013-5-23
 
 import xmlrpclib
 
-from cola.core.config import main_conf
 from cola.core.utils import get_ip
 from cola.core.mq.hash_ring import HashRing
 

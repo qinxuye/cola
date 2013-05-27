@@ -12,15 +12,15 @@ class Url(object):
         self.name = name
         self.parser = parser
         
-class UrlCollections(object):
+class UrlPatterns(object):
     def __init__(self, *urls):
         for url in urls:
             if not isinstance(url, Url):
                 raise ValueError('urls must be Url instances')
-        self.url_collections = list(urls)
+        self.url_patterns = list(urls)
         
     def __add__(self, url_obj):
         if not isinstance(url_obj, Url):
             raise ValueError('url_obj must be an instance of Url')
-        self.url_collections.append(url_obj)
+        self.url_patterns.append(url_obj)
         return self

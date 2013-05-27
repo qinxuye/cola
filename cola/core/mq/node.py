@@ -191,7 +191,9 @@ class Node(object):
             if not f.endswith(str(idx+1)):
                 dir_ = os.path.dirname(f)
                 self._remove_handles(f)
+                self.map_files.remove(f)
                 
                 new_f = os.path.join(dir_, str(idx+1))
                 os.rename(f, new_f)
+                self.map_files.append(new_f)
                 self._add_handles(new_f)

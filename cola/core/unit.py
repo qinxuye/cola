@@ -20,3 +20,6 @@ class Bundle(object):
         
     def urls(self):
         raise NotImplementedError
+    
+    def __str__(self):
+        return self.label

@@ -12,3 +12,5 @@ class DependencyNotInstalledError(Exception):
         
     def __str__(self):
         return 'Error because lacking of dependency: %s' % self.dep
+    
+class ConfigurationError(Exception): pass

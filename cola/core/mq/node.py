@@ -102,12 +102,18 @@ class Node(object):
             src_obj = obj
             obj = '\n'.join(obj) + '\n'
             is_batch = True
+        else:
+            obj = obj + '\n'
+            
+        # If no file has enough space
+        if len(obj) > self.NODE_FILE_SIZE:
+            raise NodeNoSpaceForPut('No enouph space for this put.')
         
         for f in self.map_files:
             # check if mmap created
             if f not in self.map_handles:
                 fp = self.file_handles[f]
-                fp.write(obj + '\n')
+                fp.write(obj)
                 fp.flush()
                 
                 m = mmap.mmap(fp.fileno(), self.NODE_FILE_SIZE)
@@ -115,20 +121,16 @@ class Node(object):
             else:
                 m = self.map_handles[f]
                 size = m.rfind('\n')
-                new_size = size + 1 + len(obj + '\n')
+                new_size = size + 1 + len(obj)
                 
                 if new_size >= self.NODE_FILE_SIZE:
                     continue
                 
-                m[:new_size] = m[:size+1] + obj + '\n'
+                m[:new_size] = m[:size+1] + obj
                 m.flush()
                 
             if is_batch: return src_obj
             return obj
-        
-        # If no file has enough space
-        if len(obj) > self.NODE_FILE_SIZE:
-            raise NodeNoSpaceForPut('No enouph space for this put.')
         
         name = str(int(os.path.split(self.map_files[-1])[1]) + 1)
         path = os.path.join(self.dir_, name)
@@ -197,3 +199,4 @@ class Node(object):
                 os.rename(f, new_f)
                 self.map_files.append(new_f)
                 self._add_handles(new_f)
+        self.map_files = sorted(self.map_files)

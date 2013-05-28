@@ -20,8 +20,12 @@ class Test(unittest.TestCase):
     def testMechanizeOpener(self):
         test_url = 'http://www.baidu.com'
         opener = MechanizeOpener()
+        
         assert 'baidu' in opener.open(test_url)
-        assert u'百度' in opener.browse_open(test_url).title()
+        
+        br = opener.browse_open(test_url)
+        assert u'百度' in br.title()
+        assert 'baidu' in br.response().read()
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

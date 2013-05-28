@@ -12,8 +12,8 @@ from cola.core.utils import get_ip
 from cola.core.mq.hash_ring import HashRing
 
 class MessageQueue(object):
-    def __init__(self, nodes, local_node, rpc_server, 
-                 local_store, backup_store, copies=1):
+    def __init__(self, nodes, local_node=None, rpc_server=None, 
+                 local_store=None, backup_store=None, copies=1):
         self.nodes = nodes
         self.local_node = local_node
         self.local_store = local_store
@@ -21,8 +21,9 @@ class MessageQueue(object):
         self.hash_ring = HashRing(self.nodes)
         self.copies = max(min(len(self.nodes)-1, copies), 0)
         
-        rpc_server.register_function(self.backup_store.put, 'put_backup')
-        rpc_server.register_instance(self.local_store)
+        if rpc_server is not None:
+            rpc_server.register_function(self.backup_store.put, 'put_backup')
+            rpc_server.register_instance(self.local_store)
         
     def _put(self, node, objs, bkup=False):
         if node == self.local_node:
@@ -81,7 +82,10 @@ class MessageQueue(object):
             self._put(k, v, bkup=True)
             
     def get(self):
-        nodes = sorted(self.nodes, key=lambda k: k==self.local_node, reverse=True)
+        if self.local_node is not None:
+            nodes = sorted(self.nodes, key=lambda k: k==self.local_node, reverse=True)
+        else:
+            nodes = self.nodes
         for n in nodes:
             obj = self._get(n)
             if obj is not None:

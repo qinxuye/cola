@@ -25,6 +25,7 @@ class Test(unittest.TestCase):
         self.assertEqual(context.name, 'cola-unittest')
         self.assertEqual(context.description, 'This is a just unittest')
         self.assertEqual(context.job.db, 'cola')
+        self.assertEqual(context.job.port, 12103)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

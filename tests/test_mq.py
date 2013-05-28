@@ -12,6 +12,7 @@ import random
 from cola.core.rpc import ColaRPCServer
 from cola.core.mq.node import Node
 from cola.core.mq import MessageQueue
+from cola.core.mq.client import MessageQueueClient
 
 class Test(unittest.TestCase):
 
@@ -34,6 +35,8 @@ class Test(unittest.TestCase):
             thd = threading.Thread(target=getattr(self, 'rpc_server%s'%i).serve_forever)
             thd.setDaemon(True)
             thd.start()
+            
+        self.client = MessageQueueClient(nodes)
 
     def tearDown(self):
         try:
@@ -47,10 +50,10 @@ class Test(unittest.TestCase):
 
     def testMQ(self):
         self.assertGreater(self.size, 0)
-        
+          
         mq = self.mq0
         data = [str(random.randint(10000, 50000)) for _ in range(20)]
-        
+          
         mq.put(data)
         gets = []
         while True:
@@ -58,8 +61,16 @@ class Test(unittest.TestCase):
             if get is None:
                 break
             gets.append(get)
-        
+          
         self.assertEqual(sorted(data), sorted(gets))
+        
+        # test mq client
+        data = str(random.randint(10000, 50000))
+        self.client.put(data)
+        
+        get = self.client.get()
+             
+        self.assertEqual(data, get)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

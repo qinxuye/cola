@@ -7,6 +7,7 @@ Created on 2013-5-24
 '''
 
 import socket
+import os
 
 def get_ip():
     localIP = socket.gethostbyname(socket.gethostname())
@@ -14,3 +15,11 @@ def get_ip():
     for ip in ex:
         if ip != localIP:
             return ip
+        
+def root_dir():
+    def _get_dir(f):
+        return os.path.dirname(f)
+    f = os.path.abspath(__file__)
+    for _ in range(3):
+        f = _get_dir(f)
+    return f

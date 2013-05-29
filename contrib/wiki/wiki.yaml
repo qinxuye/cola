@@ -1,0 +1,8 @@
+job:
+  db: wiki
+  mode: url # also can be `bundle`
+  size: 1000   # the destination (including bundle or url) size
+  limit: 0  # 0 means no restrictions, if greater than 0, means webpages opened per minute.
+  master_port: 12102
+  port: 12103
+  instances: 2

@@ -10,9 +10,13 @@ import os
 import xmlrpclib
 import time
 import threading
+import random
 
 from cola.core.mq import MessageQueue
 from cola.core.mq.node import Node
+from cola.core.rpc import ColaRPCServer
+from cola.core.utils import get_ip
+from cola.core.errors import ConfigurationError
 
 MAX_THREADS_SIZE = 10
 TIME_SLEEP = 10
@@ -27,10 +31,7 @@ class JobLoader(object):
         self.stop = False
         
         self.ctx = context or self.job.context
-        
-        # Thread pool
         self.instances = max(min(self.ctx.job.instances, MAX_THREADS_SIZE), 1)
-        
         self.size =self.ctx.job.size
         
     def init_mq(self, rpc_server, nodes, local_node, loc, copies=1):
@@ -104,6 +105,13 @@ class JobLoader(object):
         return self.complete(obj)
         
     def run(self):
+        if self.job.login_hook is not None:
+            if 'login' not in self.ctx.job or \
+                not isinstance(self.ctx.job.login, list):
+                raise ConfigurationError('If login_hook set, config files must contains `login`')
+            kw = random.choice(self.ctx.job.login)
+            self.job.login_hook(**kw)
+        
         def _call():
             stop = False
             while not self.stop and not stop:
@@ -115,12 +123,69 @@ class JobLoader(object):
                 
                 stop = self._execute(obj)
                 
-        def _callback(result):
-            if not self.stop and result:
-                self.pool.apply_async(_call(), callback=_callback)
-                
         threads = [threading.Thread(target=_call) for _ in range(self.instances)]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
+
+def create_rpc_server(job, context=None):
+    ctx = context or job.context
+    rpc_server = ColaRPCServer((get_ip, ctx.job.port))
+    thd = threading.Thread(target=rpc_server.serve_forever)
+    thd.start()
+    thd.setDaemon(True)
+    return rpc_server
+            
+if __name__ == "__main__":
+    import sys
+    import hashlib
+    
+    from cola.core.utils import root_dir
+    
+    if len(sys.argv) < 2:
+        raise ValueError('Worker job loader need at least 2 parameters.')
+    
+    path = sys.argv[1]
+    if not os.path.exists(path):
+        raise ValueError('Job definition does not exist.')
+    
+    master = None
+    if len(sys.argv) > 2:
+        master = sys.argv[2]
+        
+    dir_, name = os.path.split(path)
+    if os.path.isfile(path):
+        name = name.rstrip('.py')
+    sys.path.insert(0, dir_)
+    job_module = __import__(name)
+    job = job_module.get_job()
+    
+    def mkdir(self, dir_):
+        if not os.path.exists(dir_):
+            os.mkdir(dir_)
+    
+    holder = os.path.join(root_dir(), 'worker')
+    mkdir(holder)
+    holder = os.path.join(holder, hashlib.md5(job.name).hexdigest())
+    mkdir(holder)
+    mq_holder = os.path.join(holder, 'mq')
+    mkdir(mq_holder)
+    
+    context = None
+    local_node = '%s:%s' % (get_ip(), job.context.job.port)
+    nodes = [local_node]
+    if master is not None:
+        server = xmlrpclib.ServerProxy('http://%s' % master)
+        context = server.get_context()
+        nodes = server.get_nodes()
+    
+    rpc_server = create_rpc_server(job)
+    loader = JobLoader(job, master)
+    loader.init_mq(rpc_server, nodes, local_node, mq_holder, 
+                   copies=2 if master else 1)
+    
+    if master is None:
+        loader.run()
+    else:
+        rpc_server.register_function(loader.run, name='run')

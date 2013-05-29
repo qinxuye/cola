@@ -6,3 +6,6 @@ job:
   master_port: 12102
   port: 12103
   instances: 2
+  mongo:
+    host: 'localhost'
+    port: 27017

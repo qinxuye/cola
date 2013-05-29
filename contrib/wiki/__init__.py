@@ -13,6 +13,7 @@ from cola.core.urls import UrlPatterns, Url
 from cola.core.parsers import Parser
 from cola.core.opener import MechanizeOpener
 from cola.core.errors import DependencyNotInstalledError
+from cola.core.config import Config
 from cola.job import Job
 
 try:
@@ -25,7 +26,24 @@ try:
 except ImportError:
     raise DependencyNotInstalledError('python-dateutil')
 
+try:
+    from mongoengine import connect, DoesNotExist, \
+                            Document, StringField, DateTimeField
+except ImportError:
+    raise DependencyNotInstalledError('mongoengine')
+
 user_conf = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'wiki.yaml')
+user_config = Config(user_conf)
+
+mongo_host = user_config.job.mongo.host
+mongo_port = user_config.job.mongo.port
+db_name = user_config.job.db
+connect(db_name, host=mongo_host, port=mongo_port)
+
+class WikiDocument(Document):
+    title = StringField()
+    content = StringField()
+    last_update = DateTimeField()
 
 class WikiParser(Parser):
     def __init__(self, **kw):
@@ -33,7 +51,15 @@ class WikiParser(Parser):
         super(WikiParser, self).__init__(opener=opener_cls, **kw)
         
     def store(self, title, content, last_update):
-        pass
+        try:
+            doc = WikiDocument.objects.get(title=title)
+            if last_update > doc.last_update:
+                doc.content = content
+                doc.last_update = last_update
+                doc.update()
+        except DoesNotExist:
+            doc = WikiDocument(title=title, content=content, last_update=last_update)
+            doc.save()
     
     def parse(self, url=None):
         url = url or self.url
@@ -58,7 +84,7 @@ class WikiParser(Parser):
             last_update = last_update.replace(u'年', '-').replace(u'月', '-').replace(u'日', '')
             last_update = parse(last_update)
             
-        return self.store(title, content, last_update)
+        self.store(title, content, last_update)
 
 url_patterns = UrlPatterns(
     Url(r'^http://(zh|en).wikipedia.org/wiki/[^(:|/)]+$', 'wiki_page', WikiParser)

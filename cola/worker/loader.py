@@ -7,21 +7,21 @@ Created on 2013-5-28
 '''
 
 import os
-import xmlrpclib
 import time
 import threading
+import signal
 import random
 import sys
-import hashlib
 
 from cola.core.mq import MessageQueue
 from cola.core.mq.node import Node
-from cola.core.rpc import ColaRPCServer
+from cola.core.rpc import ColaRPCServer, client_call
 from cola.core.utils import get_ip, root_dir
 from cola.core.errors import ConfigurationError
 
 MAX_THREADS_SIZE = 10
 TIME_SLEEP = 10
+BUDGET_REQUIRE = 10
 
 class JobLoader(object):
     def __init__(self, job, mq=None, master=None, context=None):
@@ -30,11 +30,19 @@ class JobLoader(object):
         self.master = master
         
         # If stop
-        self.stop = False
+        self.stopped = False
         
         self.ctx = context or self.job.context
         self.instances = max(min(self.ctx.job.instances, MAX_THREADS_SIZE), 1)
         self.size =self.ctx.job.size
+        self.budget = 0
+        
+        # The execute unit
+        self.executing = None
+        
+        # register signal
+        signal.signal(signal.SIGINT, self.signal_handler)
+        signal.signal(signal.SIGTERM, self.signal_handler)
         
     def init_mq(self, rpc_server, nodes, local_node, loc, copies=1):
         mq_store_dir = os.path.join(loc, 'store')
@@ -57,40 +65,55 @@ class JobLoader(object):
         )
         
     def stop(self):
-        self.stop = True
-        # sth need to do
+        self.stopped = True
+        
+        if self.executing is not None:
+            self.mq.put(self.executing)
         
         self.finish()
+        
+    def signal_handler(self, signum, frame):
+        self.stop()
         
     def complete(self, obj):
         if self.ctx.job.size <= 0:
             return False
         
+        self.executing = None
         if self.master is not None:
-            server = xmlrpclib.ServerProxy('http://%s' % self.master)
-            return server.complete(obj)
+            return client_call(master, 'complete', obj)
         else:
             self.size -= 1
             # sth to log
             if self.size <= 0:
-                self.stop = True
-            return self.stop
+                self.stopped = True
+            return self.stopped
             
     def finish(self):
         self.mq.shutdown()
         
-    def _execute(self, obj):
-        # sth need to do in order to register master under limited speed
+    def _require_budget(self):
+        if self.master is None or self.ctx.job.limits == 0:
+            return
         
+        if self.budget > 0:
+            self.budget -= 1
+            return
+        
+        while self.budget == 0 and not self.stopped:
+            self.budget = client_call(self.master, 'require', BUDGET_REQUIRE)
+        
+    def _execute(self, obj):
         if self.job.is_bundle:
             bundle = self.job.unit_cls(obj)
             urls = bundle.urls()
             
-            while len(urls) > 0:
+            while len(urls) > 0 or not self.stopped:
                 url = urls.pop(0)
                 
                 parser_cls = self.job.url_patterns.get_parser(url)
                 if parser_cls is not None:
+                    self._require_budget()
                     next_urls, bundles = parser_cls(self.job.opener_cls, url).parse()
                     next_urls = list(self.job.url_patterns.matches(next_urls))
                     next_urls.extend(urls)
@@ -98,6 +121,7 @@ class JobLoader(object):
                     if bundles:
                         self.mq.put(bundles)
         else:
+            self._require_budget()
             parser_cls = self.job.url_patterns.get_parser(obj)
             if parser_cls is not None:
                 next_urls = parser_cls(self.job.opener_cls, obj).parse()
@@ -115,15 +139,16 @@ class JobLoader(object):
             self.job.login_hook(**kw)
         
         def _call():
-            stop = False
-            while not self.stop and not stop:
+            stopped = False
+            while not self.stopped and not stopped:
                 obj = self.mq.get()
                 print 'start to get %s' % obj
                 if obj is None:
                     time.sleep(TIME_SLEEP)
                     continue
                 
-                stop = self._execute(obj)
+                self.executing = obj
+                stopped = self._execute(obj)
                 
         try:
             threads = [threading.Thread(target=_call) for _ in range(self.instances)]
@@ -159,7 +184,7 @@ def load_job(path, master=None):
     
     holder = os.path.join(root_dir(), 'worker')
     mkdir(holder)
-    holder = os.path.join(holder, hashlib.md5(job.name).hexdigest())
+    holder = os.path.join(holder, job.name.replace(' ', '_'))
     mkdir(holder)
     mq_holder = os.path.join(holder, 'mq')
     mkdir(mq_holder)
@@ -168,9 +193,7 @@ def load_job(path, master=None):
     local_node = '%s:%s' % (get_ip(), job.context.job.port)
     nodes = [local_node]
     if master is not None:
-        server = xmlrpclib.ServerProxy('http://%s' % master)
-        context = server.get_context()
-        nodes = server.get_nodes()
+        nodes = client_call(master, 'get_nodes')
     
     rpc_server = create_rpc_server(job)
     loader = JobLoader(job, master, context=context)
@@ -182,11 +205,24 @@ def load_job(path, master=None):
         loader.run()
         rpc_server.shutdown()
     else:
-        rpc_server.register_function(loader.run, name='run')
+        try:
+            _start_to_run = False
+            def _run():
+                _start_to_run = True
+                loader.run()
+            rpc_server.register_function(_run, name='run')
+            rpc_server.register_function(loader.stop, name='stop')
+            
+            client_call(master, 'ready', local_node)
+            
+            # If master does not get ready
+            while not _start_to_run: pass
+        finally:
+            rpc_server.shutdown()
             
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        raise ValueError('Worker job loader need at least 2 parameters.')
+        raise ValueError('Worker job loader need at least 1 parameters.')
     
     path = sys.argv[1]
     master = None

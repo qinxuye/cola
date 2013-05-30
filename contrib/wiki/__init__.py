@@ -80,7 +80,7 @@ class WikiParser(Parser):
             last_update = last_update.rsplit(u'on', 1)[1].strip('.')
             last_update = parse(last_update)
         else:
-            last_update = last_update.rsplit(u'于', 1)[1].strip('。')
+            last_update = last_update.rsplit(u'于', 1)[1].strip(u'。')
             last_update = re.sub(r'\([^\)]+\)\s', '', last_update)
             last_update = last_update.replace(u'年', '-').replace(u'月', '-').replace(u'日', '')
             last_update = parse(last_update)
@@ -91,6 +91,8 @@ class WikiParser(Parser):
         url = url or self.url
         opener = self.opener()
         
+        lang = url.strip('http://').split('.', 1)[0]
+        
         br = opener.browse_open(url)
         html = br.response().read()
         soup = BeautifulSoup(html)
@@ -98,6 +100,7 @@ class WikiParser(Parser):
         title, content, last_update = self._extract(soup)
         if title is None:
             return []
+        title = title + ' ' + lang
         self.store(title, content, last_update)
         
         def _is_same(out_url):

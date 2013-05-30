@@ -6,7 +6,12 @@ Created on 2013-5-26
 @author: Chine
 '''
 
+import re
+
+from cola.core.errors import ConfigurationError
 from cola.job.context import Context
+
+JOB_NAME_RE = re.compile(r'(\w| )+')
 
 class Job(object):
     def __init__(self, name, url_patterns, opener_cls, starts,
@@ -14,6 +19,8 @@ class Job(object):
                  instances=1, user_conf=None,
                  login_hook=None):
         self.name = name
+        if not JOB_NAME_RE.match(name):
+            raise ConfigurationError('Job name can only contain alphabet, number and space.')
         self.url_patterns = url_patterns
         self.opener_cls = opener_cls
         self.starts = starts

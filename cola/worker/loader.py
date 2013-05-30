@@ -11,11 +11,13 @@ import xmlrpclib
 import time
 import threading
 import random
+import sys
+import hashlib
 
 from cola.core.mq import MessageQueue
 from cola.core.mq.node import Node
 from cola.core.rpc import ColaRPCServer
-from cola.core.utils import get_ip
+from cola.core.utils import get_ip, root_dir
 from cola.core.errors import ConfigurationError
 
 MAX_THREADS_SIZE = 10
@@ -123,36 +125,26 @@ class JobLoader(object):
                 
                 stop = self._execute(obj)
                 
-        threads = [threading.Thread(target=_call) for _ in range(self.instances)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+        try:
+            threads = [threading.Thread(target=_call) for _ in range(self.instances)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+        finally:
+            self.finish()
 
 def create_rpc_server(job, context=None):
     ctx = context or job.context
-    rpc_server = ColaRPCServer((get_ip, ctx.job.port))
+    rpc_server = ColaRPCServer((get_ip(), ctx.job.port))
     thd = threading.Thread(target=rpc_server.serve_forever)
-    thd.start()
     thd.setDaemon(True)
+    thd.start()
     return rpc_server
-            
-if __name__ == "__main__":
-    import sys
-    import hashlib
-    
-    from cola.core.utils import root_dir
-    
-    if len(sys.argv) < 2:
-        raise ValueError('Worker job loader need at least 2 parameters.')
-    
-    path = sys.argv[1]
+
+def load_job(path, master=None):
     if not os.path.exists(path):
         raise ValueError('Job definition does not exist.')
-    
-    master = None
-    if len(sys.argv) > 2:
-        master = sys.argv[2]
         
     dir_, name = os.path.split(path)
     if os.path.isfile(path):
@@ -161,7 +153,7 @@ if __name__ == "__main__":
     job_module = __import__(name)
     job = job_module.get_job()
     
-    def mkdir(self, dir_):
+    def mkdir(dir_):
         if not os.path.exists(dir_):
             os.mkdir(dir_)
     
@@ -181,11 +173,23 @@ if __name__ == "__main__":
         nodes = server.get_nodes()
     
     rpc_server = create_rpc_server(job)
-    loader = JobLoader(job, master)
+    loader = JobLoader(job, master, context=context)
     loader.init_mq(rpc_server, nodes, local_node, mq_holder, 
                    copies=2 if master else 1)
     
     if master is None:
+        loader.mq.put(job.starts)
         loader.run()
+        rpc_server.shutdown()
     else:
         rpc_server.register_function(loader.run, name='run')
+            
+if __name__ == "__main__":
+    if len(sys.argv) < 2:
+        raise ValueError('Worker job loader need at least 2 parameters.')
+    
+    path = sys.argv[1]
+    master = None
+    if len(sys.argv) > 2:
+        master = sys.argv[2]
+    load_job(path, master=master)

@@ -1,11 +1,14 @@
 job:
   db: wiki
   mode: url # also can be `bundle`
-  size: 1000   # the destination (including bundle or url) size
+  size: 100   # the destination (including bundle or url) size
   limit: 0  # 0 means no restrictions, if greater than 0, means webpages opened per minute.
   master_port: 12102
   port: 12103
-  instances: 2
+  instances: 4
   mongo:
     host: 'localhost'
     port: 27017
+  starts:
+    - url: http://en.wikipedia.org/wiki/Python
+    - url: http://zh.wikipedia.org/wiki/Python

@@ -18,16 +18,18 @@ from cola.core.mq.node import Node
 from cola.core.rpc import ColaRPCServer, client_call
 from cola.core.utils import get_ip, root_dir
 from cola.core.errors import ConfigurationError
+from cola.core.logs import get_logger
 
 MAX_THREADS_SIZE = 10
 TIME_SLEEP = 10
 BUDGET_REQUIRE = 10
 
 class JobLoader(object):
-    def __init__(self, job, mq=None, master=None, context=None):
+    def __init__(self, job, mq=None, logger=None, master=None, context=None):
         self.job = job
         self.mq = mq
         self.master = master
+        self.logger = logger
         
         # If stop
         self.stopped = False
@@ -76,6 +78,9 @@ class JobLoader(object):
         self.stop()
         
     def complete(self, obj):
+        if self.logger is not None:
+            self.logger.info('Finish %s' % obj)
+        
         if self.ctx.job.size <= 0:
             return False
         
@@ -102,31 +107,52 @@ class JobLoader(object):
         
         while self.budget == 0 and not self.stopped:
             self.budget = client_call(self.master, 'require', BUDGET_REQUIRE)
+            
+    def _log(self, obj, err):
+        if self.logger is not None:
+            self.logger.info('Error when get bundle: %s' % obj)
+            self.logger.exception(err)
+            
+        if self.master is None:
+            raise err
         
     def _execute(self, obj):
         if self.job.is_bundle:
             bundle = self.job.unit_cls(obj)
             urls = bundle.urls()
             
-            while len(urls) > 0 or not self.stopped:
-                url = urls.pop(0)
+            try:
                 
-                parser_cls = self.job.url_patterns.get_parser(url)
-                if parser_cls is not None:
-                    self._require_budget()
-                    next_urls, bundles = parser_cls(self.job.opener_cls, url).parse()
-                    next_urls = list(self.job.url_patterns.matches(next_urls))
-                    next_urls.extend(urls)
-                    urls = next_urls
-                    if bundles:
-                        self.mq.put(bundles)
+                while len(urls) > 0 or not self.stopped:
+                    url = urls.pop(0)
+                    
+                    parser_cls = self.job.url_patterns.get_parser(url)
+                    if parser_cls is not None:
+                        self._require_budget()
+                        next_urls, bundles = parser_cls(self.job.opener_cls, url).parse()
+                        next_urls = list(self.job.url_patterns.matches(next_urls))
+                        next_urls.extend(urls)
+                        urls = next_urls
+                        if bundles:
+                            self.mq.put(bundles)
+                            
+            except Exception, e:
+                self._log(obj, e)
+                
         else:
             self._require_budget()
-            parser_cls = self.job.url_patterns.get_parser(obj)
-            if parser_cls is not None:
-                next_urls = parser_cls(self.job.opener_cls, obj).parse()
-                next_urls = list(self.job.url_patterns.matches(next_urls))
-                self.mq.put(next_urls)
+            
+            try:
+                
+                parser_cls = self.job.url_patterns.get_parser(obj)
+                if parser_cls is not None:
+                    next_urls = parser_cls(self.job.opener_cls, obj).parse()
+                    next_urls = list(self.job.url_patterns.matches(next_urls))
+                    self.mq.put(next_urls)
+                    
+            except Exception, e:
+                self._log(obj, e)
+                    
             
         return self.complete(obj)
         
@@ -178,25 +204,21 @@ def load_job(path, master=None):
     job_module = __import__(name)
     job = job_module.get_job()
     
-    def mkdir(dir_):
-        if not os.path.exists(dir_):
-            os.mkdir(dir_)
-    
-    holder = os.path.join(root_dir(), 'worker')
-    mkdir(holder)
-    holder = os.path.join(holder, job.name.replace(' ', '_'))
-    mkdir(holder)
+    holder = os.path.join(root_dir(), 'worker', job.name.replace(' ', '_'))
     mq_holder = os.path.join(holder, 'mq')
-    mkdir(mq_holder)
+    if not os.path.exists(mq_holder):
+        os.makedirs(mq_holder)
     
-    context = None
+    # Logger
+    logger = get_logger(os.path.join(holder, 'job.log'))
+    
     local_node = '%s:%s' % (get_ip(), job.context.job.port)
     nodes = [local_node]
     if master is not None:
         nodes = client_call(master, 'get_nodes')
     
     rpc_server = create_rpc_server(job)
-    loader = JobLoader(job, master, context=context)
+    loader = JobLoader(job, logger=logger, master=master)
     loader.init_mq(rpc_server, nodes, local_node, mq_holder, 
                    copies=2 if master else 1)
     

@@ -6,7 +6,6 @@ Created on 2013-5-23
 @author: Chine
 '''
 
-from __future__ import with_statement
 import os
 import threading
 import mmap

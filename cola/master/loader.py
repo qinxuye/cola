@@ -134,14 +134,9 @@ def load_job(path, nodes, context=None):
     job_module = __import__(name)
     job = job_module.get_job()
     
-    def mkdir(dir_):
-        if not os.path.exists(dir_):
-            os.mkdir(dir_)
-    
-    holder = os.path.join(root_dir(), 'master')
-    mkdir(holder)
-    holder = os.path.join(holder, job.name.replace(' ', '_'))
-    mkdir(holder)
+    holder = os.path.join(root_dir(), 'master', job.name.replace(' ', '_'))
+    if not os.path.exists(holder):
+        os.makedirs(holder)
     
     lock_f = os.path.join(holder, 'lock')
     if os.path.exists(lock_f):

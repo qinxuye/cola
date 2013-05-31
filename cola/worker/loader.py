@@ -15,6 +15,7 @@ import sys
 
 from cola.core.mq import MessageQueue
 from cola.core.mq.node import Node
+from cola.core.bloomfilter import FileBloomFilter
 from cola.core.rpc import ColaRPCServer, client_call
 from cola.core.utils import get_ip, root_dir
 from cola.core.errors import ConfigurationError
@@ -46,14 +47,15 @@ class JobLoader(object):
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
         
-    def init_mq(self, rpc_server, nodes, local_node, loc, copies=1):
+    def init_mq(self, rpc_server, nodes, local_node, loc, 
+                verify_exists_hook=None, copies=1):
         mq_store_dir = os.path.join(loc, 'store')
         mq_backup_dir = os.path.join(loc, 'backup')
         if not os.path.exists(mq_store_dir):
             os.mkdir(mq_store_dir)
         if not os.path.exists(mq_backup_dir):
             os.mkdir(mq_backup_dir)
-        mq_store = Node(mq_store_dir)
+        mq_store = Node(mq_store_dir, verify_exists_hook=verify_exists_hook)
         mq_backup = Node(mq_backup_dir)
         
         # MQ relative
@@ -217,9 +219,14 @@ def load_job(path, master=None):
     if master is not None:
         nodes = client_call(master, 'get_nodes')
     
+    # Bloom filter file
+    bloom_filter_file = os.path.join(holder, 'bloomfilter')
+    bloom_filter_hook = FileBloomFilter(bloom_filter_file, job.context.job.size*2)
+    
     rpc_server = create_rpc_server(job)
     loader = JobLoader(job, logger=logger, master=master)
     loader.init_mq(rpc_server, nodes, local_node, mq_holder, 
+                   verify_exists_hook=bloom_filter_hook,
                    copies=2 if master else 1)
     
     if master is None:

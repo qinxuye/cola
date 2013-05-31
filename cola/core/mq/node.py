@@ -19,9 +19,10 @@ class NodeNoSpaceForPut(Exception): pass
 NODE_FILE_SIZE = 4 * 1024 * 1024 # single node store file must be less than 4M.
 
 class Node(object):
-    def __init__(self, dir_, size=NODE_FILE_SIZE):
+    def __init__(self, dir_, size=NODE_FILE_SIZE, verify_exists_hook=None):
         self.lock = threading.Lock()
         self.NODE_FILE_SIZE = size
+        self.verify_exists_hook = verify_exists_hook
         
         self.dir_ = dir_
         self.lock_file = os.path.join(dir_, 'lock')
@@ -55,6 +56,10 @@ class Node(object):
                 os.remove(f)
             for f in self.map_files:
                 os.rename(f, f + '.old')
+                
+            if self.verify_exists_hook is not None:
+                self.verify_exists_hook.sync()
+                self.verify_exists_hook.close()
         finally:
             self.lock.acquire()
             try:
@@ -96,13 +101,26 @@ class Node(object):
             self.file_handles[path] = open(path, 'w+')
                     
     def put(self, obj):
-        is_batch = False
         if isinstance(obj, (tuple, list)):
-            src_obj = obj
-            obj = '\n'.join(obj) + '\n'
-            is_batch = True
+            if self.verify_exists_hook is None:
+                src_obj = obj
+                obj = '\n'.join(obj) + '\n'
+            else:
+                src_obj = list()
+                for itm in obj:
+                    if not self.verify_exists_hook.verify(itm):
+                        src_obj.append(itm)
+                obj = '\n'.join(src_obj) + '\n'
         else:
-            obj = obj + '\n'
+            if self.verify_exists_hook is None:
+                src_obj = obj
+                obj = obj + '\n'
+            else:
+                if not self.verify_exists_hook.verify(obj):
+                    src_obj = obj
+                    obj = obj + '\n'
+                else:
+                    return ''
             
         # If no file has enough space
         if len(obj) > self.NODE_FILE_SIZE:
@@ -128,8 +146,7 @@ class Node(object):
                 m[:new_size] = m[:size+1] + obj
                 m.flush()
                 
-            if is_batch: return src_obj
-            return obj
+            return src_obj
         
         name = str(int(os.path.split(self.map_files[-1])[1]) + 1)
         path = os.path.join(self.dir_, name)
@@ -140,8 +157,7 @@ class Node(object):
         fp.flush()
         self._add_handles(path)
         
-        if is_batch: return src_obj
-        return obj
+        return src_obj
             
     def get(self):
         for m in self.map_handles.values():

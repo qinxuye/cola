@@ -72,7 +72,7 @@ class WikiParser(Parser):
         if '-' in title:
             title = title.split('-')[0].strip()
         content = soup.find('div', attrs={'id': 'mw-content-text', 'class': 'mw-content-ltr'})
-        if content.table is not None:
+        while content.table is not None:
             content.table.extract()
         content = content.text.split('Preprocessor', 1)[0]
         last_update = soup.find('li', attrs={'id': 'footer-info-lastmod'}).text

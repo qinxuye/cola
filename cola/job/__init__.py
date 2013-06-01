@@ -16,7 +16,7 @@ JOB_NAME_RE = re.compile(r'(\w| )+')
 class Job(object):
     def __init__(self, name, url_patterns, opener_cls, starts,
                  is_bundle=False, unit_cls=str,
-                 instances=1, user_conf=None,
+                 instances=1, debug=False, user_conf=None,
                  login_hook=None):
         self.name = name
         if not JOB_NAME_RE.match(name):
@@ -28,6 +28,7 @@ class Job(object):
         self.is_bundle = is_bundle
         self.unit_cls = unit_cls
         self.instances = instances
+        self.debug = debug
         self.user_conf = user_conf
         self.login_hook = login_hook
         

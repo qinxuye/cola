@@ -25,6 +25,8 @@ MAX_THREADS_SIZE = 10
 TIME_SLEEP = 10
 BUDGET_REQUIRE = 10
 
+UNLIMIT_BLOOM_FILTER_CAPACITY = 10000
+
 class JobLoader(object):
     def __init__(self, job, mq=None, logger=None, master=None, context=None):
         self.job = job
@@ -115,7 +117,7 @@ class JobLoader(object):
             self.logger.info('Error when get bundle: %s' % obj)
             self.logger.exception(err)
             
-        if self.master is None:
+        if self.job.debug:
             raise err
         
     def _execute(self, obj):
@@ -221,7 +223,11 @@ def load_job(path, master=None):
     
     # Bloom filter file
     bloom_filter_file = os.path.join(holder, 'bloomfilter')
-    bloom_filter_hook = FileBloomFilter(bloom_filter_file, job.context.job.size*2)
+    if job.context.job.size > 0:
+        bloom_filter_size = job.context.job.size*2
+    else:
+        bloom_filter_size = UNLIMIT_BLOOM_FILTER_CAPACITY
+    bloom_filter_hook = FileBloomFilter(bloom_filter_file, bloom_filter_size)
     
     rpc_server = create_rpc_server(job)
     loader = JobLoader(job, logger=logger, master=master)

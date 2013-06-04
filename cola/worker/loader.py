@@ -14,7 +14,6 @@ import random
 import sys
 
 from cola.core.mq import MessageQueue
-from cola.core.mq.node import Node
 from cola.core.bloomfilter import FileBloomFilter
 from cola.core.rpc import ColaRPCServer, client_call
 from cola.core.utils import get_ip, root_dir
@@ -57,18 +56,16 @@ class JobLoader(object):
             os.mkdir(mq_store_dir)
         if not os.path.exists(mq_backup_dir):
             os.mkdir(mq_backup_dir)
-        mq_store = Node(mq_store_dir, verify_exists_hook=verify_exists_hook)
-        mq_backup = Node(mq_backup_dir)
         
         # MQ relative
         self.mq = MessageQueue(
             nodes,
             local_node,
             rpc_server,
-            mq_store,
-            mq_backup,
             copies=copies
         )
+        self.mq.init_store(mq_store_dir, mq_backup_dir, 
+                           verify_exists_hook=verify_exists_hook)
         
     def stop(self):
         self.stopped = True

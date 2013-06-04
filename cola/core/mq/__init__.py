@@ -6,44 +6,68 @@ Created on 2013-5-23
 @author: Chine
 '''
 
-import xmlrpclib
+import os
 
 from cola.core.utils import get_ip
 from cola.core.mq.hash_ring import HashRing
+from cola.core.mq.node import Node
+from cola.core.rpc import client_call
 
 class MessageQueue(object):
     def __init__(self, nodes, local_node=None, rpc_server=None, 
-                 local_store=None, backup_store=None, copies=1):
+                 local_store=None, backup_stores=None, copies=1):
         self.nodes = nodes
         self.local_node = local_node
         self.local_store = local_store
-        self.backup_store = backup_store
+        self.rpc_server = rpc_server
+        self.backup_stores = backup_stores
         self.hash_ring = HashRing(self.nodes)
         self.copies = max(min(len(self.nodes)-1, copies), 0)
         
-        if rpc_server is not None:
-            rpc_server.register_function(self.backup_store.put, 'put_backup')
-            rpc_server.register_instance(self.local_store)
+        if rpc_server is not None and \
+            self.local_store is not None and \
+            self.backup_stores is not None:
+            self._register_rpc()
+            
+    def _register_rpc(self):
+        self.rpc_server.register_function(self.put_backup, 'put_backup')
+        self.rpc_server.register_instance(self.local_store)
+            
+    def init_store(self, local_store_path, backup_stores_path, 
+                   verify_exists_hook=None):
+        self.local_store = Node(local_store_path, 
+                                verify_exists_hook=verify_exists_hook)
         
-    def _put(self, node, objs, bkup=False):
+        backup_nodes = self.nodes[:]
+        backup_nodes.remove(self.local_node)
+        self.backup_stores = {}
+        for backup_node in backup_nodes:
+            backup_node_dir = backup_node.replace(':', '_')
+            backup_path = os.path.join(backup_stores_path, backup_node_dir)
+            if not os.path.exists(backup_path):
+                os.makedirs(backup_path)
+            self.backup_stores[backup_node] = Node(backup_path, 
+                                                   size=512*1024)
+            
+        self._register_rpc()
+        
+    def _put(self, node, objs):
         if node == self.local_node:
-            if not bkup:
-                self.local_store.put(objs)
-            else:
-                self.backup_store.put(objs)
+            self.local_store.put(objs)
         else:
-            serv = xmlrpclib.ServerProxy('http://%s' % node)
-            if not bkup:
-                serv.put(objs)
-            else:
-                serv.put_backup(objs)
+            client_call(node, 'put', objs)
+                
+    def _put_backup(self, node, src, objs):
+        if node == self.local_node:
+            self.put_backup(src, objs)
+        else:
+            client_call(node, 'put_backup', src, objs)
                 
     def _get(self, node):
         if node == self.local_node:
             return self.local_store.get()
         else:
-            serv = xmlrpclib.ServerProxy('http://%s' % node)
-            return serv.get()
+            return client_call(node, 'get')
         
     def put(self, obj_or_objs):
         def _check(obj):
@@ -72,14 +96,21 @@ class MessageQueue(object):
                 bkup_node = next(it)
                 if bkup_node is None: continue
                 
-                obs = bkup_puts.get(bkup_node, [])
+                kv = bkup_puts.get(bkup_node, {})
+                obs = kv.get(put_node, [])
                 obs.append(obj)
-                bkup_puts[bkup_node] = obs
+                kv[put_node] = obs
+                bkup_puts[bkup_node] = kv
         
         for k, v in puts.iteritems():
             self._put(k, v)
         for k, v in bkup_puts.iteritems():
-            self._put(k, v, bkup=True)
+            for src_node, obs in v.iteritems():
+                self._put_backup(k, src_node, obs)
+            
+    def put_backup(self, src, obj_or_objs):
+        backup_store = self.backup_stores[src]
+        backup_store.put(obj_or_objs)
             
     def get(self):
         if self.local_node is not None:
@@ -91,6 +122,25 @@ class MessageQueue(object):
             if obj is not None:
                 return obj
             
+    def remove_node(self, node):
+        self.nodes.remove(node)
+        self.hash_ring = HashRing(self.nodes)
+        
+        backup_store = self.backup_stores[node]
+        obj = backup_store.get()
+        while obj is not None:
+            self.local_store.put(obj)
+            obj = backup_store.get()
+            
+        backup_store.shutdown()
+        del self.backup_stores[node]
+        
+    def add_node(self, node, backup_store):
+        self.nodes.append(node)
+        self.hash_ring = HashRing(self.nodes)
+        self.backup_stores[node] = backup_store
+            
     def shutdown(self):
         self.local_store.shutdown()
-        self.backup_store.shutdown()
+        for backup_store in self.backup_stores.values():
+            backup_store.shutdown()

@@ -22,7 +22,8 @@ class Test(unittest.TestCase):
         for url in ('http://en.wikipedia.org/wiki/Python',
                     'http://zh.wikipedia.org/wiki/Python'):
             parser.parse(url)
-            self.assertEqual(parser.title, 'Python')
+            lang = url.strip('http://').split('.', 1)[0]
+            self.assertEqual(parser.title, 'Python '+lang)
             self.assertGreater(len(parser.content), 0)
             self.assertTrue(isinstance(parser.last_update, datetime))
             
@@ -35,10 +36,10 @@ class Test(unittest.TestCase):
         from pymongo import Connection
         conn = Connection(mongo_host, mongo_port)
         db = getattr(conn, db_name)
-        wiki = db.wiki_document.find_one({'title': 'Python'})
+        wiki = db.wiki_document.find_one({'title': 'Python en'})
         self.assertIsNotNone(wiki)
         
-        db.wiki_document.remove({'title': 'Python'})
+        db.wiki_document.remove({'title': 'Python en'})
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

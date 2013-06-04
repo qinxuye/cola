@@ -10,7 +10,6 @@ import threading
 import random
 
 from cola.core.rpc import ColaRPCServer
-from cola.core.mq.node import Node
 from cola.core.mq import MessageQueue
 from cola.core.mq.client import MessageQueueClient
 
@@ -25,13 +24,10 @@ class Test(unittest.TestCase):
         
         for i in range(self.size):
             setattr(self, 'rpc_server%s'%i, ColaRPCServer(('localhost', ports[i])))
-            setattr(self, 'store_node%s'%i, Node(self.dirs[2*i]))
-            setattr(self, 'backup_node%s'%i, Node(self.dirs[2*i+1]))
             setattr(self, 'mq%s'%i, 
-                MessageQueue(nodes, nodes[i], getattr(self, 'rpc_server%s'%i),
-                             getattr(self, 'store_node%s'%i),
-                             getattr(self, 'backup_node%s'%i))
+                MessageQueue(nodes, nodes[i], getattr(self, 'rpc_server%s'%i))
             )
+            getattr(self, 'mq%s'%i).init_store(self.dirs[2*i], self.dirs[2*i+1])
             thd = threading.Thread(target=getattr(self, 'rpc_server%s'%i).serve_forever)
             thd.setDaemon(True)
             thd.start()

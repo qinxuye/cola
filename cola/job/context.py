@@ -20,7 +20,7 @@ class Context(object):
         else:
             self.user_conf = PropertyObject(dict())
         self.user_defines = PropertyObject(user_defines)
-        
+         
         dicts = PropertyObject({})
         for obj in (self.main_conf, self.user_conf, self.user_defines):
             dicts.update(obj)

@@ -6,8 +6,6 @@ Created on 2013-5-28
 @author: Chine
 '''
 
-import xmlrpclib
-
 from cola.core.mq.hash_ring import HashRing
 from cola.core.mq import MessageQueue
 

@@ -8,6 +8,7 @@ Created on 2013-5-24
 
 import socket
 import os
+import sys
 
 def get_ip():
     localIP = socket.gethostbyname(socket.gethostname())
@@ -25,3 +26,13 @@ def root_dir():
     for _ in range(3):
         f = _get_dir(f)
     return f
+
+def import_job(path):
+    dir_, name = os.path.split(path)
+    if os.path.isfile(path):
+        name = name.rstrip('.py')
+    sys.path.insert(0, dir_)
+    job_module = __import__(name)
+    job = job_module.get_job()
+    
+    return job

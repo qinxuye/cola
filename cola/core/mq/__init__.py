@@ -37,6 +37,7 @@ class MessageQueue(object):
                    verify_exists_hook=None):
         self.local_store = Node(local_store_path, 
                                 verify_exists_hook=verify_exists_hook)
+        self.backup_stores_path = backup_stores_path
         
         backup_nodes = self.nodes[:]
         backup_nodes.remove(self.local_node)
@@ -135,12 +136,27 @@ class MessageQueue(object):
         backup_store.shutdown()
         del self.backup_stores[node]
         
-    def add_node(self, node, backup_store):
+    def add_node(self, node, backup_store=None):
         self.nodes.append(node)
         self.hash_ring = HashRing(self.nodes)
-        self.backup_stores[node] = backup_store
+        if backup_store is not None:
+            self.backup_stores[node] = backup_store
+        else:
+            backup_stores_path = getattr(self, 'backup_stores_path')
+            if backup_stores_path is not None:
+                path = os.path.join(backup_stores_path, node.replace(':', '_'))
+                if not os.path.exists(path):
+                    os.makedirs(path)
+                self.backup_stores[node] = Node(path, 
+                                                size=512*1024)
             
     def shutdown(self):
         self.local_store.shutdown()
         for backup_store in self.backup_stores.values():
             backup_store.shutdown()
+            
+    def __enter__(self):
+        return self
+    
+    def __exit__(self):
+        self.shutdown()

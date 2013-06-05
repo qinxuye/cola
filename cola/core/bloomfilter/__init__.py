@@ -141,3 +141,9 @@ class FileBloomFilter(BloomFilter):
     
     def close(self):
         self.f.close()
+        
+    def __enter__(self):
+        return self
+    
+    def __exit__(self):
+        self.close()

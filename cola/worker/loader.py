@@ -19,12 +19,13 @@ from cola.core.rpc import ColaRPCServer, client_call
 from cola.core.utils import get_ip, root_dir
 from cola.core.errors import ConfigurationError
 from cola.core.logs import get_logger
+from cola.core.utils import import_job
 
 MAX_THREADS_SIZE = 10
 TIME_SLEEP = 10
 BUDGET_REQUIRE = 10
 
-UNLIMIT_BLOOM_FILTER_CAPACITY = 10000
+UNLIMIT_BLOOM_FILTER_CAPACITY = 100000
 
 class JobLoader(object):
     def __init__(self, job, mq=None, logger=None, master=None, context=None):
@@ -185,6 +186,14 @@ class JobLoader(object):
                 t.join()
         finally:
             self.finish()
+            
+    def remove_node(self, node):
+        if self.mq is not None:
+            self.mq.remove_node(node)
+            
+    def add_node(self, node):
+        if self.mq is not None:
+            self.mq.add_node(node)
 
 def create_rpc_server(job, context=None):
     ctx = context or job.context
@@ -194,16 +203,22 @@ def create_rpc_server(job, context=None):
     thd.start()
     return rpc_server
 
+def create_bloom_filter_hook(bloom_filter_file, job):
+    size = job.context.job.size
+    if not os.path.exists(path):
+        bloom_filter_size = size*10
+    else:
+        if size > 0:
+            bloom_filter_size = size*2
+        else:
+            bloom_filter_size = UNLIMIT_BLOOM_FILTER_CAPACITY
+    return FileBloomFilter(bloom_filter_file, bloom_filter_size)
+
 def load_job(path, master=None):
     if not os.path.exists(path):
         raise ValueError('Job definition does not exist.')
         
-    dir_, name = os.path.split(path)
-    if os.path.isfile(path):
-        name = name.rstrip('.py')
-    sys.path.insert(0, dir_)
-    job_module = __import__(name)
-    job = job_module.get_job()
+    job = import_job(path)
     
     holder = os.path.join(root_dir(), 'worker', job.name.replace(' ', '_'))
     mq_holder = os.path.join(holder, 'mq')
@@ -218,13 +233,9 @@ def load_job(path, master=None):
     if master is not None:
         nodes = client_call(master, 'get_nodes')
     
-    # Bloom filter file
+    # Bloom filter hook
     bloom_filter_file = os.path.join(holder, 'bloomfilter')
-    if job.context.job.size > 0:
-        bloom_filter_size = job.context.job.size*2
-    else:
-        bloom_filter_size = UNLIMIT_BLOOM_FILTER_CAPACITY
-    bloom_filter_hook = FileBloomFilter(bloom_filter_file, bloom_filter_size)
+    bloom_filter_hook = create_bloom_filter_hook(bloom_filter_file, job)
     
     rpc_server = create_rpc_server(job)
     loader = JobLoader(job, logger=logger, master=master)
@@ -244,6 +255,8 @@ def load_job(path, master=None):
                 loader.run()
             rpc_server.register_function(_run, name='run')
             rpc_server.register_function(loader.stop, name='stop')
+            rpc_server.register_function(loader.add_node, name='add_node')
+            rpc_server.register_function(loader.remove_node, name='remove_node')
             
             client_call(master, 'ready', local_node)
             

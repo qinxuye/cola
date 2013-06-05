@@ -15,7 +15,7 @@ import sys
 
 from cola.core.rpc import ColaRPCServer, client_call
 from cola.core.mq.client import MessageQueueClient
-from cola.core.utils import get_ip, root_dir
+from cola.core.utils import get_ip, root_dir, import_job
 
 class JobMasterRunning(Exception): pass
 
@@ -48,15 +48,19 @@ class JobLoader(object):
         rpc_server.register_function(self.ready, 'ready')
         rpc_server.register_function(self.get_nodes, 'get_nodes')
         rpc_server.register_function(self.require, 'require')
+        rpc_server.register_function(self.stop, 'stop')
+        rpc_server.register_function(self.add_node, 'add_node')
+        rpc_server.register_function(self.remove_node, 'remove_node')
         
         # register signal
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
         
     def ready(self, node):
-        self.not_registered.remove(node)
-        if len(self.not_registered) == 0:
-            self.is_ready = True
+        if node in self.not_registered:
+            self.not_registered.remove(node)
+            if len(self.not_registered) == 0:
+                self.is_ready = True
     
     def get_nodes(self):
         return self.nodes
@@ -81,7 +85,8 @@ class JobLoader(object):
         def _clear():
             self.in_minute = 0
             time.sleep(60)
-            _clear()
+            if not self.stopped:
+                _clear()
         thd = threading.Thread(target=_clear)
         thd.setDaemon(True)
         thd.start()
@@ -115,6 +120,17 @@ class JobLoader(object):
         main_thread.start()
         main_thread.join()
         
+    def add_node(self, node):
+        for node in self.nodes:
+            client_call(node, 'add_node', node)
+        self.nodes.append(node)
+        client_call(node, 'run')
+        
+    def remove_node(self, node):
+        for node in self.nodes:
+            client_call(node, 'remove_node', node)
+        self.nodes.remove(node)
+        
 def create_rpc_server(job, context=None):
     ctx = context or job.context
     rpc_server = ColaRPCServer((get_ip(), ctx.job.master_port))
@@ -127,14 +143,12 @@ def load_job(path, nodes, context=None):
     if not os.path.exists(path):
         raise ValueError('Job definition does not exist.')
         
-    dir_, name = os.path.split(path)
-    if os.path.isfile(path):
-        name = name.rstrip('.py')
-    sys.path.insert(0, dir_)
-    job_module = __import__(name)
-    job = job_module.get_job()
+    job = import_job(path)
     
-    holder = os.path.join(root_dir(), 'master', job.name.replace(' ', '_'))
+    job_name = job.name.replace(' ', '_')
+    if job.debug:
+        job_name += '_debug'
+    holder = os.path.join(root_dir(), 'data', 'master', job_name)
     if not os.path.exists(holder):
         os.makedirs(holder)
     

@@ -219,3 +219,9 @@ class Node(object):
                 self.map_files.append(new_f)
                 self._add_handles(new_f)
         self.map_files = sorted(self.map_files, key=lambda f: int(os.path.split(f)[1]))
+        
+    def __enter__(self):
+        return self
+    
+    def __exit__(self):
+        self.shutdown()

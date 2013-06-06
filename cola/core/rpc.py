@@ -9,6 +9,7 @@ Created on 2013-5-23
 import SocketServer
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 import xmlrpclib
+import os
 
 class ColaRPCServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     
@@ -22,13 +23,14 @@ def client_call(server, func_name, *args):
     return getattr(serv, func_name)(*args)
 
 class FileTransportServer(object):
-    def __init__(self, rpc_server, path):
+    def __init__(self, rpc_server, dirname):
         self.rpc_server = rpc_server
-        self.path = path
+        self.dirname = dirname
         self.rpc_server.register_function(self.receive_file)
         
-    def receive_file(self, args):
-        with open(self.path, 'wb') as handle:
+    def receive_file(self, name, args):
+        path = os.path.join(self.dirname, name)
+        with open(path, 'wb') as handle:
             handle.write(args.data)
             return True
         
@@ -37,7 +39,8 @@ class FileTransportClient(object):
         self.server = server
         self.path = path
         
-    def send_file(self):        
+    def send_file(self):
+        name = os.path.split(self.path)[1].rsplit('.')[0]
         with open(self.path, 'rb') as handle:
             binary_data = xmlrpclib.Binary(handle.read())
-            client_call(self.server, 'receive_file', binary_data)
+            client_call(self.server, 'receive_file', name, binary_data)

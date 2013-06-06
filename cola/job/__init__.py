@@ -19,6 +19,8 @@ class Job(object):
                  instances=1, debug=False, user_conf=None,
                  login_hook=None):
         self.name = name
+        self.real_name = self.name.replace(' ', '_')
+        
         if not JOB_NAME_RE.match(name):
             raise ConfigurationError('Job name can only contain alphabet, number and space.')
         self.url_patterns = url_patterns

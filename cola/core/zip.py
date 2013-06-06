@@ -14,7 +14,7 @@ class ZipHandler(object):
     @classmethod
     def compress(cls, zip_file, src_dir):
         root_len = len(os.path.abspath(src_dir))
-        dir_name = os.path.split(src_dir)[1]
+        dir_name = os.path.split(src_dir)[1].replace(' ', '_')
         
         with zipfile.ZipFile(zip_file, 'w') as zf:
             for root, _, files in os.walk(src_dir):
@@ -28,8 +28,11 @@ class ZipHandler(object):
     
     @classmethod
     def uncompress(cls, zip_file, dest_dir):
+        dir_name = None
         with zipfile.ZipFile(zip_file) as zf:
             for f in zf.namelist():
                 zf.extract(f, dest_dir)
-                
-        return dest_dir
+                if dir_name is None and '/' not in f.strip('/'):
+                    dir_name = f.strip('/')
+                    
+        return os.path.join(dest_dir, dir_name)

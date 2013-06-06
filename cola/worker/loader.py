@@ -220,7 +220,7 @@ def load_job(path, master=None):
         
     job = import_job(path)
     
-    holder = os.path.join(root_dir(), 'worker', job.name.replace(' ', '_'))
+    holder = os.path.join(root_dir(), 'data', 'worker', job.real_name)
     mq_holder = os.path.join(holder, 'mq')
     if not os.path.exists(mq_holder):
         os.makedirs(mq_holder)

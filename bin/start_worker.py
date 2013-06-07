@@ -30,7 +30,7 @@ def start_worker(master):
     path = os.path.join(root_dir(), 'cola', 'worker', 'watcher.py')
     
     print 'Start worker at %s:%s' % (get_ip(), main_conf.worker.port)
-    print 'Worker will run in background even close the terminal.'
+    print 'Worker will run in background.'
     
     subprocess.Popen(['python', path, master])
     
@@ -47,9 +47,11 @@ if __name__ == "__main__":
             master = raw_input("Please input the master(form: \"ip:port\" or \"ip\") ")
             if ':' not in master:
                 master += ':%s' % main_conf.master.port
+        else:
+            print 'Input illegal!'
     else:
         master = sys.argv[1]
         if ':' not in master:
             master += ':%s' % main_conf.master.port
             
-    start_worker(master)
+    if master is not None: start_worker(master)

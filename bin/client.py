@@ -21,9 +21,13 @@ Created on 2013-6-7
 '''
 
 import socket
+import os
+import tempfile
+import shutil
 
-from cola.core.rpc import client_call
-from cola.core.utils import get_ip
+from cola.core.rpc import client_call, FileTransportClient
+from cola.core.zip import ZipHandler
+from cola.core.utils import get_ip, import_job
 from cola.job.conf import main_conf
 
 class ClientAction(object):
@@ -39,6 +43,50 @@ class ClientAction(object):
                 print 'Cannot connect to cola master.'
             else:
                 print 'Cola cluster has been shutdown.'
+        elif name == 'list jobs':
+            print 'Running jobs: '
+            for job in client_call(self.master, 'list_jobs'):
+                print job
+        elif name == 'list workers':
+            print 'Cola workers: '
+            for worker in client_call(self.master, 'list_workers'):
+                print worker
+        elif name == 'list job dirs':
+            print 'Runnable job dirs: '
+            for dir_ in client_call(self.master, 'list_job_dirs'):
+                print dir_
+        elif name.startswith('run remote job '):
+            print 'Remote job will run in background.'
+            
+            job_dir = name[len('run remote job '):]
+            if job_dir not in client_call(self.master, 'list_job_dirs'):
+                print 'Remote job dir not exists!'
+            else:
+                client_call(self.master, 'start_job', job_dir, False)
+        elif name.startswith('run local job '):
+            print 'Job has been committed and will run in background.'
+            
+            start = len('run local job ')
+            path = name[start:].strip().strip('"').strip("'")
+            if not os.path.exists(path):
+                print 'Job path not exists!'
+            else:
+                try:
+                    job = import_job(path)
+                except (ImportError, AttributeError):
+                    print 'Job path is illegal!'
+                    
+                dir_ = tempfile.mkdtemp()
+                try:
+                    zip_filename = os.path.split(path)[1].replace(' ', '_') + '.zip'
+                    zip_file = os.path.join(dir_, zip_filename)
+                    
+                    ZipHandler.compress(zip_file, path, type_filters=("pyc", ))
+                    FileTransportClient(self.master, zip_file).send_file()
+                    
+                    client_call(self.master, 'start_job', zip_filename)
+                finally:
+                    shutil.rmtree(dir_)
             
 if __name__ == "__main__":
     import sys
@@ -53,6 +101,8 @@ if __name__ == "__main__":
             master = raw_input("Please input the master(form: \"ip:port\" or \"ip\"): ")
             if ':' not in master:
                 master += ':%s' % main_conf.master.port
+        else:
+            print 'Input illegal!'
     else:
         master = sys.argv[1]
         if ':' not in master:
@@ -60,8 +110,8 @@ if __name__ == "__main__":
             
     client = ClientAction(master)
             
-    while True:
-        cmd = raw_input("Input command(h for help): ").strip()
+    while master is not None:
+        cmd = raw_input("> Input command(h for help): ").strip()
         if cmd == 'q' or cmd == 'quit':
             break
         else:

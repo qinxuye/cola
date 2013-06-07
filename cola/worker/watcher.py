@@ -57,18 +57,20 @@ class WorkerWatcher(object):
     def register_heartbeat(self):
         client_call(self.master, 'register_heartbeat', self.node)
         
-    def start_job(self, zip_filename):
-        zip_file = os.path.join(self.zip_dir, zip_filename)
-        job_dir = ZipHandler.uncompress(zip_file, self.job_dir)
+    def start_job(self, zip_filename, uncompress=True):
+        if uncompress:
+            zip_file = os.path.join(self.zip_dir, zip_filename)
+            job_dir = ZipHandler.uncompress(zip_file, self.job_dir)
+        else:
+            job_dir = os.path.join(self.job_dir, zip_filename.rsplit('.', 1)[0])
+            
         job = import_job(job_dir)
         
         master_port = job.context.job.master_port
         master = '%s:%s' % (self.master.split(':')[0], master_port)
         dirname = os.path.dirname(os.path.abspath(__file__))
         f = os.path.join(dirname, 'loader.py')
-        return_code = subprocess.call('python "%s" "%s" %s' % (f, job_dir, master))
-        
-        return return_code
+        subprocess.Popen('python "%s" "%s" %s' % (f, job_dir, master))
     
     def clear_job(self, job_name):
         job_name = job_name.replace(' ', '_')

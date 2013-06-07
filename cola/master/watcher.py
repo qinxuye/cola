@@ -25,6 +25,7 @@ import threading
 import os
 import subprocess
 import shutil
+import socket
 
 from cola.core.utils import get_ip
 from cola.core.rpc import client_call, ColaRPCServer, \
@@ -90,11 +91,14 @@ class MasterWatcher(object):
         
         self.rpc_server.register_function(self.register_watcher_heartbeat, 
                                           'register_heartbeat')
-        self.rpc_server.register_function(self.list_jobs, 'list_jobs')
         self.rpc_server.register_function(self.stop, 'stop')
+        self.rpc_server.register_function(self.list_jobs, 'list_jobs')
         self.rpc_server.register_function(self.start_job, 'start_job')
         self.rpc_server.register_function(self.stop_job, 'stop_job')
+        self.rpc_server.register_function(self.finish_job, 'finish_job')
         self.rpc_server.register_function(self.clear_job, 'clear_job')
+        self.rpc_server.register_function(self.list_job_dirs, 'list_job_dirs')
+        self.rpc_server.register_function(self.list_workers, 'list_workers')
         
         self.set_receiver(zip_dir)
         
@@ -146,47 +150,57 @@ class MasterWatcher(object):
         thread.setDaemon(True)
         thread.start()
         return thread
+    
+    def list_workers(self):
+        return self.nodes_watchers.keys()
         
     def list_jobs(self):
         return self.running_jobs.keys()
+    
+    def list_job_dirs(self):
+        return os.listdir(self.job_dir)
     
     def set_receiver(self, base_dir):
         serv = FileTransportServer(self.rpc_server, base_dir)
         return serv
     
-    def start_job(self, zip_filename):
-        zip_file = os.path.join(self.zip_dir, zip_filename)
-        
-        # transfer zip file to workers
-        for watcher in self.nodes_watchers:
-            if watcher.split(':')[0] == self.ip_address:
-                continue
-            file_trans_client = FileTransportClient(watcher, zip_file)
-            file_trans_client.send_file()
-        
-        job_dir = ZipHandler.uncompress(zip_file, self.job_dir)
+    def start_job(self, zip_filename, uncompress=True):
+        if uncompress:
+            zip_file = os.path.join(self.zip_dir, zip_filename)
+            
+            # transfer zip file to workers
+            for watcher in self.nodes_watchers:
+                if watcher.split(':')[0] == self.ip_address:
+                    continue
+                file_trans_client = FileTransportClient(watcher, zip_file)
+                file_trans_client.send_file()
+            
+            job_dir = ZipHandler.uncompress(zip_file, self.job_dir)
+        else:
+            job_dir = os.path.join(self.job_dir, zip_filename.rsplit('.', 1)[0])
+            
         job = import_job(job_dir)
         
         worker_port = job.context.job.port
         port = job.context.job.master_port
-        nodes = [watcher.split(':')[0] for watcher in self.nodes_watchers],
-        info = MasterJobInfo(port, nodes, worker_port)
-        self.running_jobs[job.real_name] = info
+        nodes = [watcher.split(':')[0] for watcher in self.nodes_watchers]
         
-        dirname = os.path.dirname(os.path.abspath(__file__))
-        f = os.path.join(dirname, 'loader.py')
-        workers = ['%s:%s'%(node, worker_port) for node in nodes]
-        return_code = subprocess.call('python "%(py)s" "%(job_dir)s" %(nodes)s' % {
-            'py': f,
-            'job_dir': job_dir,
-            'nodes': ' '.join(workers)
-        })
-        
-        # call workers to start job
-        for worker_watcher in self.nodes_watchers:
-            client_call(worker_watcher, 'start_job', zip_filename)
-        
-        return return_code == 0
+        if len(nodes) > 0:
+            info = MasterJobInfo(port, nodes, worker_port)
+            self.running_jobs[job.real_name] = info
+            
+            dirname = os.path.dirname(os.path.abspath(__file__))
+            f = os.path.join(dirname, 'loader.py')
+            workers = ['%s:%s'%(node, worker_port) for node in nodes]
+            subprocess.Popen('python "%(py)s" "%(job_dir)s" %(nodes)s' % {
+                'py': f,
+                'job_dir': job_dir,
+                'nodes': ' '.join(workers)
+            })
+            
+            # call workers to start job
+            for worker_watcher in self.nodes_watchers:
+                client_call(worker_watcher, 'start_job', zip_filename, uncompress)
     
     def stop_job(self, job_real_name):
         if job_real_name not in self.running_jobs:
@@ -194,6 +208,9 @@ class MasterWatcher(object):
         job_info = self.running_jobs[job_real_name]
         client_call(job_info.job_master, 'stop')
         return True
+    
+    def finish_job(self, job_real_name):
+        del self.running_jobs[job_real_name]
     
     def clear_job(self, job_name):
         job_name = job_name.replace(' ', '_')
@@ -204,6 +221,14 @@ class MasterWatcher(object):
             client_call(watcher, 'clear_job')
     
     def stop(self):
+        for watcher in self.nodes_watchers:
+            client_call(watcher, 'stop')
+        # stop all jobs
+        for job_info in self.running_jobs.values():
+            try:
+                client_call(job_info.job_master, 'stop')
+            except socket.error:
+                pass
         self.stopped = True
         
     def run(self):

@@ -42,8 +42,10 @@ BUDGET_REQUIRE = 10
 UNLIMIT_BLOOM_FILTER_CAPACITY = 100000
 
 class JobLoader(object):
-    def __init__(self, job, mq=None, logger=None, master=None, context=None):
+    def __init__(self, job, rpc_server, 
+                 mq=None, logger=None, master=None, context=None):
         self.job = job
+        self.rpc_server = rpc_server
         self.mq = mq
         self.master = master
         self.logger = logger
@@ -63,7 +65,12 @@ class JobLoader(object):
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
         
-    def init_mq(self, rpc_server, nodes, local_node, loc, 
+        rpc_server.register_function(self.stop, name='stop')
+        rpc_server.register_function(self.add_node, name='add_node')
+        rpc_server.register_function(self.remove_node, name='remove_node')
+        rpc_server.register_function(self.run, name='run')
+        
+    def init_mq(self, nodes, local_node, loc, 
                 verify_exists_hook=None, copies=1):
         mq_store_dir = os.path.join(loc, 'store')
         mq_backup_dir = os.path.join(loc, 'backup')
@@ -76,7 +83,7 @@ class JobLoader(object):
         self.mq = MessageQueue(
             nodes,
             local_node,
-            rpc_server,
+            self.rpc_server,
             copies=copies
         )
         self.mq.init_store(mq_store_dir, mq_backup_dir, 
@@ -102,7 +109,7 @@ class JobLoader(object):
         
         self.executing = None
         if self.master is not None:
-            return client_call(master, 'complete', obj)
+            return client_call(self.master, 'complete', obj)
         else:
             self.size -= 1
             # sth to log
@@ -112,6 +119,7 @@ class JobLoader(object):
             
     def finish(self):
         self.mq.shutdown()
+        self.stopped = True
         
     def _require_budget(self):
         if self.master is None or self.ctx.job.limits == 0:
@@ -234,7 +242,8 @@ def load_job(path, master=None):
         
     job = import_job(path)
     
-    holder = os.path.join(root_dir(), 'data', 'worker', job.real_name)
+    holder = os.path.join(
+        root_dir(), 'data', 'worker', 'jobs', job.real_name)
     mq_holder = os.path.join(holder, 'mq')
     if not os.path.exists(mq_holder):
         os.makedirs(mq_holder)
@@ -252,30 +261,28 @@ def load_job(path, master=None):
     bloom_filter_hook = create_bloom_filter_hook(bloom_filter_file, job)
     
     rpc_server = create_rpc_server(job)
-    loader = JobLoader(job, logger=logger, master=master)
-    loader.init_mq(rpc_server, nodes, local_node, mq_holder, 
+    loader = JobLoader(job, rpc_server, logger=logger, master=master)
+    loader.init_mq(nodes, local_node, mq_holder, 
                    verify_exists_hook=bloom_filter_hook,
                    copies=2 if master else 1)
     
     if master is None:
-        loader.mq.put(job.starts)
-        loader.run()
-        rpc_server.shutdown()
+        try:
+            loader.mq.put(job.starts)
+            loader.run()
+        finally:
+            rpc_server.shutdown()
     else:
         try:
-            _start_to_run = False
-            def _run():
-                _start_to_run = True
-                loader.run()
-            rpc_server.register_function(_run, name='run')
-            rpc_server.register_function(loader.stop, name='stop')
-            rpc_server.register_function(loader.add_node, name='add_node')
-            rpc_server.register_function(loader.remove_node, name='remove_node')
-            
             client_call(master, 'ready', local_node)
             
-            # If master does not get ready
-            while not _start_to_run: pass
+            def _start():
+                while not loader.stopped: 
+                    time.sleep(TIME_SLEEP)
+                loader.run()
+            thread = threading.Thread(target=_start)
+            thread.start()
+            thread.join()
         finally:
             rpc_server.shutdown()
             

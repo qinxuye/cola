@@ -30,10 +30,11 @@ import sys
 from cola.core.rpc import ColaRPCServer, client_call
 from cola.core.mq.client import MessageQueueClient
 from cola.core.utils import get_ip, root_dir, import_job
+from cola.job.conf import main_conf
 
 class JobMasterRunning(Exception): pass
 
-TIME_SLEEP = 1
+TIME_SLEEP = 10
 
 class JobLoader(object):
     def __init__(self, job, nodes, rpc_server, 
@@ -60,6 +61,7 @@ class JobLoader(object):
         
         # register rpc server
         rpc_server.register_function(self.ready, 'ready')
+        rpc_server.register_function(self.complete, 'complete')
         rpc_server.register_function(self.get_nodes, 'get_nodes')
         rpc_server.register_function(self.require, 'require')
         rpc_server.register_function(self.stop, 'stop')
@@ -92,7 +94,10 @@ class JobLoader(object):
     def complete(self, obj):
         if self.limit_size:
             self.finishes += 1
-            return self.finishes >= self.size
+            completed = self.finishes >= self.size
+            if completed:
+                self.stopped = True
+            return completed
         return False if not self.stopped else True
     
     def _in_minute_clear(self):
@@ -162,7 +167,7 @@ def load_job(path, nodes, context=None):
     job_name = job.name.replace(' ', '_')
     if job.debug:
         job_name += '_debug'
-    holder = os.path.join(root_dir(), 'data', 'master', job_name)
+    holder = os.path.join(root_dir(), 'data', 'master', 'jobs', job_name)
     if not os.path.exists(holder):
         os.makedirs(holder)
     
@@ -175,6 +180,9 @@ def load_job(path, nodes, context=None):
     try:
         loader = JobLoader(job, nodes, rpc_server, context=context)
         loader.run()
+        # nofify master watcher finishing
+        master_watcher = '%s:%s' % (get_ip(), main_conf.master.port)
+        client_call(master_watcher, 'finish_job', job.real_name)
     finally:
         os.remove(lock_f)
         rpc_server.shutdown()

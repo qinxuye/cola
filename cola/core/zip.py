@@ -26,17 +26,24 @@ import zipfile
 class ZipHandler(object):
     
     @classmethod
-    def compress(cls, zip_file, src_dir):
+    def compress(cls, zip_file, src_dir, type_filters=None):
         root_len = len(os.path.abspath(src_dir))
         dir_name = os.path.split(src_dir)[1].replace(' ', '_')
         
         with zipfile.ZipFile(zip_file, 'w') as zf:
-            for root, _, files in os.walk(src_dir):
-                archive_root = os.path.abspath(root)[root_len:].strip(os.sep)
-                for f in files:
-                    full_path = os.path.join(root, f)
-                    archive_name = os.path.join(dir_name, archive_root, f)
-                    zf.write(full_path, archive_name)
+            if os.path.isfile(src_dir):
+                zf.write(src_dir, dir_name)
+            else:
+                for root, _, files in os.walk(src_dir):
+                    archive_root = os.path.abspath(root)[root_len:].strip(os.sep)
+                    for f in files:
+                        if type_filters is not None and '.' in f and \
+                            f.rsplit('.', 1)[1] in type_filters:
+                            continue
+                        
+                        full_path = os.path.join(root, f)
+                        archive_name = os.path.join(dir_name, archive_root, f)
+                        zf.write(full_path, archive_name)
                     
         return zip_file
     
@@ -46,7 +53,10 @@ class ZipHandler(object):
         with zipfile.ZipFile(zip_file) as zf:
             for f in zf.namelist():
                 zf.extract(f, dest_dir)
-                if dir_name is None and '/' not in f.strip('/'):
-                    dir_name = f.strip('/')
+                if dir_name is None:
+                    if '/' in f.strip('/'):
+                        dir_name = f.strip('/').split('/')[0]
+                    else:
+                        dir_name = f.strip('/')
                     
         return os.path.join(dest_dir, dir_name)

@@ -94,7 +94,10 @@ class WikiParser(Parser):
             last_update = last_update.rsplit(u'on', 1)[1].strip('.')
             last_update = parse(last_update)
         else:
-            last_update = last_update.rsplit(u'于', 1)[1].strip(u'。')
+            if u'于' in last_update:
+                last_update = last_update.rsplit(u'于', 1)[1].strip(u'。')
+            else:
+                last_update = last_update.rsplit(u'於', 1)[1].strip(u'。')
             last_update = re.sub(r'\([^\)]+\)\s', '', last_update)
             last_update = last_update.replace(u'年', '-').replace(u'月', '-').replace(u'日', '')
             last_update = parse(last_update)

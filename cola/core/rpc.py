@@ -54,7 +54,7 @@ class FileTransportClient(object):
         self.path = path
         
     def send_file(self):
-        name = os.path.split(self.path)[1].rsplit('.')[0]
+        name = os.path.split(self.path)[1]
         with open(self.path, 'rb') as handle:
             binary_data = xmlrpclib.Binary(handle.read())
             client_call(self.server, 'receive_file', name, binary_data)

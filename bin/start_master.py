@@ -30,7 +30,7 @@ def start_master():
     path = os.path.join(root_dir(), 'cola', 'master', 'watcher.py')
     
     print 'Start master at %s:%s' % (get_ip(), main_conf.master.port)
-    print 'Master will run in background even close the terminal.'
+    print 'Master will run in background.'
     
     subprocess.Popen(['python', path])
 

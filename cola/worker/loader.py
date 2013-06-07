@@ -186,7 +186,11 @@ class JobLoader(object):
                 not isinstance(self.ctx.job.login, list):
                 raise ConfigurationError('If login_hook set, config files must contains `login`')
             kw = random.choice(self.ctx.job.login)
-            self.job.login_hook(**kw)
+            login_success = self.job.login_hook(**kw)
+            if not login_success:
+                self.logger.info('login fail')
+                self.finish()
+                return
         
         def _call():
             stopped = False
@@ -227,7 +231,7 @@ def create_rpc_server(job, context=None):
 
 def create_bloom_filter_hook(bloom_filter_file, job):
     size = job.context.job.size
-    if not os.path.exists(path):
+    if not os.path.exists(bloom_filter_file):
         bloom_filter_size = size*10
     else:
         if size > 0:

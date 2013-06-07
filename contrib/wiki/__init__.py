@@ -23,6 +23,7 @@ Created on 2013-5-29
 import os
 import re
 import urlparse
+from datetime import datetime
 
 from cola.core.urls import UrlPatterns, Url
 from cola.core.parsers import Parser
@@ -67,6 +68,10 @@ class WikiParser(Parser):
         opener_cls = MechanizeOpener
         super(WikiParser, self).__init__(opener=opener_cls, url=url, **kw)
         
+        self.html_comment_reg = re.compile(r'<!--[^-]+-->', re.DOTALL)
+        self.en_time_reg = re.compile(r'\d{1,2} [A-Z][a-z]{2,} \d{4} at \d{1,2}:\d{1,2}')
+        self.zh_time_reg = re.compile(ur'\d{4}年\d{1,2}月\d{1,2}日 \(.+\) \d{1,2}:\d{1,2}')
+        
     def store(self, title, content, last_update):
         try:
             doc = WikiDocument.objects.get(title=title)
@@ -88,19 +93,22 @@ class WikiParser(Parser):
         content = soup.find('div', attrs={'id': 'mw-content-text', 'class': 'mw-content-ltr'})
         while content.table is not None:
             content.table.extract()
-        content = content.text.split('Preprocessor', 1)[0]
-        last_update = soup.find('li', attrs={'id': 'footer-info-lastmod'}).text
-        if u'on' in last_update:
-            last_update = last_update.rsplit(u'on', 1)[1].strip('.')
+        content = content.text
+        
+        last_update_str = soup.find('li', attrs={'id': 'footer-info-lastmod'}).text
+        last_update = None
+        match_en_time = self.en_time_reg.search(last_update_str)
+        if match_en_time:
+            last_update = match_en_time.group()
             last_update = parse(last_update)
-        else:
-            if u'于' in last_update:
-                last_update = last_update.rsplit(u'于', 1)[1].strip(u'。')
-            else:
-                last_update = last_update.rsplit(u'於', 1)[1].strip(u'。')
+        match_zh_time = self.zh_time_reg.search(last_update_str)
+        if match_zh_time:
+            last_update = match_zh_time.group()
             last_update = re.sub(r'\([^\)]+\)\s', '', last_update)
             last_update = last_update.replace(u'年', '-').replace(u'月', '-').replace(u'日', '')
             last_update = parse(last_update)
+        if last_update is None:
+            last_update = datetime.now()
         
         return title, content, last_update
     
@@ -112,6 +120,7 @@ class WikiParser(Parser):
         
         br = opener.browse_open(url)
         html = br.response().read()
+        html = self.html_comment_reg.sub('', html)
         soup = BeautifulSoup(html)
         
         title, content, last_update = self._extract(soup)

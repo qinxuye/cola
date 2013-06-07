@@ -75,6 +75,7 @@ class ClientAction(object):
                     job = import_job(path)
                 except (ImportError, AttributeError):
                     print 'Job path is illegal!'
+                    return
                     
                 dir_ = tempfile.mkdtemp()
                 try:

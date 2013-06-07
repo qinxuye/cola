@@ -64,9 +64,9 @@ class MechanizeOpener(Opener):
         self.browser.addheaders = [
             ('User-agent', user_agent)]
         
-    def open(self, url):
-        return self.browser.open(url).read()
+    def open(self, url, data=None):
+        return self.browser.open(url, data=data).read()
     
-    def browse_open(self, url):
-        self.browser.open(url)
+    def browse_open(self, url, data=None):
+        self.browser.open(url, data=data)
         return self.browser

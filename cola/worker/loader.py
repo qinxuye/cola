@@ -34,6 +34,7 @@ from cola.core.utils import get_ip, root_dir
 from cola.core.errors import ConfigurationError
 from cola.core.logs import get_logger
 from cola.core.utils import import_job
+from cola.core.errors import LoginFailure
 
 MAX_THREADS_SIZE = 10
 TIME_SLEEP = 10
@@ -140,7 +141,21 @@ class JobLoader(object):
         if self.job.debug:
             raise err
         
-    def _execute(self, obj):
+    def _login(self, opener):
+        if self.job.login_hook is not None:
+            if 'login' not in self.ctx.job or \
+                not isinstance(self.ctx.job.login, list):
+                raise ConfigurationError('If login_hook set, config files must contains `login`')
+            kw = random.choice(self.ctx.job.login)
+            login_success = self.job.login_hook(opener, **kw)
+            if not login_success:
+                self.logger.info('login fail')
+            return login_success
+        
+    def _execute(self, obj, opener=None):
+        if opener is None:
+            opener = self.job.opener_cls()
+            
         if self.job.is_bundle:
             bundle = self.job.unit_cls(obj)
             urls = bundle.urls()
@@ -153,13 +168,15 @@ class JobLoader(object):
                     parser_cls = self.job.url_patterns.get_parser(url)
                     if parser_cls is not None:
                         self._require_budget()
-                        next_urls, bundles = parser_cls(self.job.opener_cls, url).parse()
+                        next_urls, bundles = parser_cls(opener, url, bundle=bundle).parse()
                         next_urls = list(self.job.url_patterns.matches(next_urls))
                         next_urls.extend(urls)
                         urls = next_urls
                         if bundles:
-                            self.mq.put(bundles)
-                            
+                            self.mq.put([str(bundle) for bundle in bundles])
+            except LoginFailure:
+                if not self._login(opener):
+                    return
             except Exception, e:
                 self._log(obj, e)
                 
@@ -170,10 +187,13 @@ class JobLoader(object):
                 
                 parser_cls = self.job.url_patterns.get_parser(obj)
                 if parser_cls is not None:
-                    next_urls = parser_cls(self.job.opener_cls, obj).parse()
+                    next_urls = parser_cls(opener, obj).parse()
                     next_urls = list(self.job.url_patterns.matches(next_urls))
                     self.mq.put(next_urls)
-                    
+            
+            except LoginFailure:
+                if not self._login(opener):
+                    return
             except Exception, e:
                 self._log(obj, e)
                     
@@ -181,18 +201,11 @@ class JobLoader(object):
         return self.complete(obj)
         
     def run(self):
-        if self.job.login_hook is not None:
-            if 'login' not in self.ctx.job or \
-                not isinstance(self.ctx.job.login, list):
-                raise ConfigurationError('If login_hook set, config files must contains `login`')
-            kw = random.choice(self.ctx.job.login)
-            login_success = self.job.login_hook(**kw)
-            if not login_success:
-                self.logger.info('login fail')
-                self.finish()
-                return
-        
         def _call():
+            opener = self.job.opener_cls()
+            if not self._login(opener):
+                return
+            
             stopped = False
             while not self.stopped and not stopped:
                 obj = self.mq.get()
@@ -202,7 +215,7 @@ class JobLoader(object):
                     continue
                 
                 self.executing = obj
-                stopped = self._execute(obj)
+                stopped = self._execute(obj, opener=opener)
                 
         try:
             threads = [threading.Thread(target=_call) for _ in range(self.instances)]

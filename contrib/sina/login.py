@@ -26,14 +26,15 @@ import binascii
 import re
 import json
 
-from cola.core.errors import DependencyNotInstalledError
+from cola.core.errors import DependencyNotInstalledError,\
+                             LoginFailure
 
 try:
     import rsa
 except ImportError:
     raise DependencyNotInstalledError("rsa")
 
-class WeiboLoginFailure(Exception): pass
+class WeiboLoginFailure(LoginFailure): pass
 
 class WeiboLogin(object):
     def __init__(self, opener, username, passwd):
@@ -96,7 +97,6 @@ class WeiboLogin(object):
             text = self.opener.open(login_url, postdata)
             
             regex = re.compile('\((.*)\)')
-            retcode_regex = re.compile('retcode=(\d+)&')
             json_data = json.loads(regex.search(text).group(1))
             return json_data['result'] == True
             

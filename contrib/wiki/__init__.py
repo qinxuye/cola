@@ -33,9 +33,9 @@ from cola.core.config import Config
 from cola.job import Job
 
 try:
-    from BeautifulSoup import BeautifulSoup
+    from bs4 import BeautifulSoup
 except ImportError:
-    raise DependencyNotInstalledError('BeautifulSoup')
+    raise DependencyNotInstalledError('BeautifulSoup4')
 
 try:
     from dateutil.parser import parse
@@ -65,9 +65,10 @@ class WikiDocument(Document):
 
 class WikiParser(Parser):
     def __init__(self, opener=None, url=None, **kw):
-        opener_cls = MechanizeOpener
-        super(WikiParser, self).__init__(opener=opener_cls, url=url, **kw)
+        super(WikiParser, self).__init__(opener=opener, url=url, **kw)
         
+        if self.opener is None:
+            self.opener = MechanizeOpener()
         self.html_comment_reg = re.compile(r'<!--[^-]+-->', re.DOTALL)
         self.en_time_reg = re.compile(r'\d{1,2} [A-Z][a-z]{2,} \d{4} at \d{1,2}:\d{1,2}')
         self.zh_time_reg = re.compile(ur'\d{4}年\d{1,2}月\d{1,2}日 \(.+\) \d{1,2}:\d{1,2}')
@@ -114,11 +115,10 @@ class WikiParser(Parser):
     
     def parse(self, url=None):
         url = url or self.url
-        opener = self.opener()
         
         lang = url.strip('http://').split('.', 1)[0]
         
-        br = opener.browse_open(url)
+        br = self.opener.browse_open(url)
         html = br.response().read()
         html = self.html_comment_reg.sub('', html)
         soup = BeautifulSoup(html)

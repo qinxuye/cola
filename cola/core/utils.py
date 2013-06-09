@@ -23,6 +23,7 @@ Created on 2013-5-24
 import socket
 import os
 import sys
+import urllib
 
 def get_ip():
     localIP = socket.gethostbyname(socket.gethostname())
@@ -52,3 +53,12 @@ def import_job(path):
     job = job_module.get_job()
     
     return job
+
+def urldecode(link):
+    decodes = {}
+    if '?' in link:
+        params = link.split('?')[1]
+        for param in params.split('&'):
+            k, v = tuple(param.split('='))
+            decodes[k] = urllib.unquote(v)
+    return decodes

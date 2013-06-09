@@ -15,18 +15,23 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Created on 2013-5-17
+Created on 2013-6-9
 
 @author: Chine
 '''
 
-class DependencyNotInstalledError(Exception):
-    def __init__(self, dep):
-        self.dep = dep
-        
-    def __str__(self):
-        return 'Error because lacking of dependency: %s' % self.dep
-    
-class ConfigurationError(Exception): pass
+import os
 
-class LoginFailure(Exception): pass
+from cola.core.config import Config
+
+base = os.path.dirname(os.path.abspath(__file__))
+user_conf = os.path.join(base, 'test.yaml')
+if not os.path.exists(user_conf):
+    user_conf = os.path.join(base, 'sina.yaml')
+user_config = Config(user_conf)
+
+starts = [start.uid for start in user_config.job.starts]
+
+mongo_host = user_config.job.mongo.host
+mongo_port = user_config.job.mongo.port
+db_name = user_config.job.db

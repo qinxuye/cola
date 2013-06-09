@@ -15,18 +15,26 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Created on 2013-5-17
+Created on 2013-6-8
 
 @author: Chine
 '''
 
-class DependencyNotInstalledError(Exception):
-    def __init__(self, dep):
-        self.dep = dep
-        
-    def __str__(self):
-        return 'Error because lacking of dependency: %s' % self.dep
-    
-class ConfigurationError(Exception): pass
+import time
 
-class LoginFailure(Exception): pass
+from cola.core.unit import Bundle
+
+class WeiboUserBundle(Bundle):
+    def __init__(self, uid):
+        super(WeiboUserBundle, self).__init__(uid)
+        self.uid = uid
+        self.exists = True
+        
+    def urls(self):
+        start = int(time.time() * (10**6))
+        return [
+            'http://weibo.com/aj/mblog/mbloglist?uid=%s&_k=%s' % (self.uid, start),
+            'http://weibo.com/%s/info' % self.uid,
+            'http://weibo.com/%s/follow' % self.uid,
+            'http://weibo.com/%s/fans' % self.uid
+        ]

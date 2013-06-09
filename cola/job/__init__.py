@@ -55,3 +55,4 @@ class Job(object):
         
     def set_userconf(self, conf):
         self.user_conf = conf
+        self.context = Context(user_conf=self.user_conf)

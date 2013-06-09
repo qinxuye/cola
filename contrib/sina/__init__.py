@@ -23,14 +23,19 @@ Created on 2013-6-7
 import os
 
 from cola.core.opener import MechanizeOpener
+from cola.core.urls import Url, UrlPatterns
 
 from login import WeiboLogin
+from parsers import MicroBlogParser, UserInfoParser
 
-opener = MechanizeOpener()
-
-def login_hook(**kw):
+def login_hook(opener, **kw):
     username = kw['username']
     passwd = kw['password']
     
     loginer = WeiboLogin(opener, username, passwd)
     return loginer.login()
+
+url_patterns = UrlPatterns(
+    Url(r'http://weibo.com/aj/mblog/mbloglist.*', 'micro_blog', MicroBlogParser),
+    Url(r'http://weibo.com/\d+/info', 'user_info', UserInfoParser),
+)

@@ -23,13 +23,15 @@ Created on 2013-6-8
 import time
 import json
 import urllib
+import urlparse
 
 from cola.core.parsers import Parser
 from cola.core.utils import urldecode
 from cola.core.errors import DependencyNotInstalledError
 
 from login import WeiboLoginFailure
-from storage import DoesNotExist, WeiboUser, \
+from bundle import WeiboUserBundle
+from storage import DoesNotExist, WeiboUser, Friend,\
                     MicroBlog, UserInfo, WorkInfo, EduInfo
 
 try:
@@ -87,7 +89,7 @@ class MicroBlogParser(WeiboParser):
         
         params['_t'] = 0
         params['__rnd'] = str(int(time.time() * 1000))
-        page = params.get('page', 1)
+        page = int(params.get('page', 1))
         pre_page = params.get('pre_page', 1)
         if 'pagebar' not in params:
             params['pagebar'] = '0'
@@ -267,3 +269,62 @@ class UserInfoParser(WeiboParser):
                 
         weibo_user.save()
         return [], []
+    
+class UserFriendParser(WeiboParser):
+    def parse(self, url=None):
+        if self.bundle.exists == False:
+            return
+        
+        url = url or self.url
+        br = self.opener.browse_open(url)
+        soup = BeautifulSoup(br.response().read())
+        
+        if not self.check(url, br):
+            return
+        
+        weibo_user = self.get_weibo_user()
+        
+        html = None
+        is_follow = True
+        for script in soup.find_all('script'):
+            text = script.text
+            if 'STK' in text:
+                text = text.replace('STK && STK.pageletM && STK.pageletM.view(', '')[:-1]
+                data = json.loads(text)
+                if data['pid'] == 'pl_relation_hisFollow' or \
+                    data['pid'] == 'pl_relation_hisFans':
+                    html = BeautifulSoup(data['html'])
+                if data['pid'] == 'pl_relation_hisFans':
+                    is_follow = False    
+        
+        bundles = []
+        ul = html.find(attrs={'class': 'cnfList', 'node-type': 'userListBox'})
+        for li in ul.find_all(attrs={'class': 'S_line1', 'action-type': 'itemClick'}):
+            data = dict([l.split('=') for l in li['action-data'].split('&')])
+            
+            friend = Friend()
+            friend.uid = data['uid']
+            friend.nickname = data['fnick']
+            friend.sex = True if data['sex'] == u'm' else False
+            
+            bundles.append(WeiboUserBundle(str(friend.uid)))
+            if is_follow:
+                weibo_user.follows.append(friend)
+            else:
+                weibo_user.fans.append(friend)
+                
+        weibo_user.save()
+        
+        urls = []
+        pages = html.find('div', attrs={'class': 'W_pages', 'node-type': 'pageList'})
+        if pages is not None:
+            a = pages.find_all('a')
+            if len(a) > 0:
+                next_ = a[-1]
+                if next_['class'] == ['W_btn_c']:
+                    url = next_['href']
+                    if not url.startswith('http://'):
+                        url = urlparse.urljoin('http://weibo.com', url)
+                    urls.append(url)
+                    
+        return urls, bundles

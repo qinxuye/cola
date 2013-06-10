@@ -162,7 +162,7 @@ class JobLoader(object):
             
             try:
                 
-                while len(urls) > 0 or not self.stopped:
+                while len(urls) > 0 and not self.stopped:
                     url = urls.pop(0)
                     
                     parser_cls = self.job.url_patterns.get_parser(url)

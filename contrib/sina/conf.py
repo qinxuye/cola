@@ -30,8 +30,10 @@ if not os.path.exists(user_conf):
     user_conf = os.path.join(base, 'sina.yaml')
 user_config = Config(user_conf)
 
-starts = [start.uid for start in user_config.job.starts]
+starts = [str(start.uid) for start in user_config.job.starts]
 
 mongo_host = user_config.job.mongo.host
 mongo_port = user_config.job.mongo.port
 db_name = user_config.job.db
+
+instances = user_config.job.instances

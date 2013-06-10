@@ -9,7 +9,7 @@ import time
 from cola.core.opener import MechanizeOpener
 
 from contrib.sina import login_hook
-from contrib.sina.parsers import MicroBlogParser, UserInfoParser
+from contrib.sina.parsers import MicroBlogParser, UserInfoParser, UserFriendParser
 from contrib.sina.conf import user_config
 from contrib.sina.bundle import WeiboUserBundle
 
@@ -47,19 +47,39 @@ class Test(unittest.TestCase):
          
         self.assertEqual(len(urls), 1)
         self.assertEqual(len(bundles), 0)
-         
+          
         user = self.collection.find_one({'uid': self.test_uid})
         self.assertEqual(len(user['statuses']), 15)
-
+         
+        parser = MicroBlogParser(opener=self.opener,
+                                 url=urls[0],
+                                 bundle=self.bundle)
+        parser.parse()
+        user = self.collection.find_one({'uid': self.test_uid})
+        self.assertEqual(len(user['statuses']), 30)
+        self.assertNotEqual(user['statuses'][0], user['statuses'][15])
+ 
     def testUserInfoParser(self):
         test_url = 'http://weibo.com/%s/info' % self.test_uid
         parser = UserInfoParser(opener=self.opener,
                                 url=test_url,
                                 bundle=self.bundle)
         parser.parse()
-         
+          
         user = self.collection.find_one({'uid': self.test_uid})
         self.assertTrue('info' in user)
+        
+    def testFriendParser(self):
+        test_url = 'http://weibo.com/%s/follow' % self.test_uid
+        parser = UserFriendParser(opener=self.opener,
+                                  url=test_url,
+                                  bundle=self.bundle)
+        urls, bundles = parser.parse()
+        self.assertEqual(len(urls), 1)
+        self.assertGreater(bundles, 0)
+        
+        user = self.collection.find_one({'uid': self.test_uid})
+        self.assertEqual(len(bundles), len(user['follows']))
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testParser']

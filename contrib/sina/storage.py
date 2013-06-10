@@ -78,6 +78,8 @@ class UserInfo(EmbeddedDocument):
     
 class Friend(EmbeddedDocument):
     uid = StringField()
+    nickname = StringField()
+    sex = BooleanField
     
 class WeiboUser(Document):
     uid = StringField()
@@ -85,5 +87,5 @@ class WeiboUser(Document):
     
     statuses = ListField(EmbeddedDocumentField(MicroBlog))
     info = EmbeddedDocumentField(UserInfo)
-    follow = ListField(EmbeddedDocumentField(Friend))
+    follows = ListField(EmbeddedDocumentField(Friend))
     fans = ListField(EmbeddedDocumentField(Friend))

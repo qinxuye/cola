@@ -135,7 +135,7 @@ class JobLoader(object):
             
     def _log(self, obj, err):
         if self.logger is not None:
-            self.logger.info('Error when get bundle: %s' % obj)
+            self.logger.error('Error when get bundle: %s' % obj)
             self.logger.exception(err)
             
         if self.job.debug:
@@ -164,6 +164,7 @@ class JobLoader(object):
                 
                 while len(urls) > 0 and not self.stopped:
                     url = urls.pop(0)
+                    self.logger.info('get %s url: %s' % (bundle.label, url))
                     
                     parser_cls = self.job.url_patterns.get_parser(url)
                     if parser_cls is not None:
@@ -173,7 +174,7 @@ class JobLoader(object):
                         next_urls.extend(urls)
                         urls = next_urls
                         if bundles:
-                            self.mq.put([str(bundle) for bundle in bundles])
+                            self.mq.put([str(b) for b in bundles])
             except LoginFailure:
                 if not self._login(opener):
                     return

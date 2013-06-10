@@ -85,7 +85,6 @@ class MicroBlogParser(WeiboParser):
             return
             
         weibo_user = self.get_weibo_user()
-        statuses = weibo_user.statuses
         
         params['_t'] = 0
         params['__rnd'] = str(int(time.time() * 1000))
@@ -128,16 +127,19 @@ class MicroBlogParser(WeiboParser):
             }).text
             is_forward = div.get('isforward') == '1'
             if is_forward:
-                mblog.forward = '%s: %s' % (
-                    div.find('a', attrs={
-                        'class': 'WB_name', 
-                        'node-type': 'feed_list_originNick'
-                    }).text,
-                    div.find('div', attrs={
-                        'class': 'WB_text',
-                        'node-type': 'feed_list_reason'
-                    }).text
-                )
+                name_a = div.find('a', attrs={
+                    'class': 'WB_name', 
+                    'node-type': 'feed_list_originNick'
+                })
+                text_a = div.find('div', attrs={
+                    'class': 'WB_text',
+                    'node-type': 'feed_list_reason'
+                })
+                if name_a is not None and text_a is not None:
+                    mblog.forward = '%s: %s' % (
+                        name_a.text,
+                        text_a.text
+                    )
             mblog.created = parse(div.select('a.S_link2.WB_time')[0]['title'])
             likes = div.find('a', attrs={'action-type': 'feed_list_like'}).text
             likes = likes.strip('(').strip(')')
@@ -154,7 +156,7 @@ class MicroBlogParser(WeiboParser):
             else:
                 mblog.comments = int(comments.strip().split('(', 1)[1].strip(')'))
             
-            statuses.append(mblog)
+            weibo_user.statuses.append(mblog)
                 
         params['max_id'] = max_id
                 

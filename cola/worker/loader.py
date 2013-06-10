@@ -245,11 +245,12 @@ def create_rpc_server(job, context=None):
 
 def create_bloom_filter_hook(bloom_filter_file, job):
     size = job.context.job.size
+    base = 1 if not job.is_bundle else 1000 
     if not os.path.exists(bloom_filter_file):
-        bloom_filter_size = size*10
+        bloom_filter_size = size*10*base
     else:
         if size > 0:
-            bloom_filter_size = size*2
+            bloom_filter_size = size*2*base
         else:
             bloom_filter_size = UNLIMIT_BLOOM_FILTER_CAPACITY
     return FileBloomFilter(bloom_filter_file, bloom_filter_size)

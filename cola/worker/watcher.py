@@ -29,11 +29,16 @@ import shutil
 from cola.core.rpc import ColaRPCServer, client_call, FileTransportServer
 from cola.core.utils import get_ip, import_job, root_dir
 from cola.core.zip import ZipHandler
-from cola.job.conf import main_conf
+from cola.core.config import main_conf
 
 TIME_SLEEP = 10
 
 class WorkerWatcherRunning(Exception): pass
+
+class WorkerJobInfo(object):
+    def __init__(self, port, popen):
+        self.node = '%s:%s' % (get_ip(), port)
+        self.popen = popen
 
 class WorkerWatcher(object):
     def __init__(self, rpc_server, master, zip_dir, job_dir):
@@ -44,6 +49,8 @@ class WorkerWatcher(object):
         self.job_dir = job_dir
         
         self.stopped = False
+        
+        self.running_jobs = {}
         
         self.rpc_server.register_function(self.stop, 'stop')
         self.rpc_server.register_function(self.start_job, 'start_job')
@@ -70,11 +77,17 @@ class WorkerWatcher(object):
         master = '%s:%s' % (self.master.split(':')[0], master_port)
         dirname = os.path.dirname(os.path.abspath(__file__))
         f = os.path.join(dirname, 'loader.py')
-        subprocess.Popen('python "%s" "%s" %s' % (f, job_dir, master))
+        
+        popen = subprocess.Popen('python "%s" "%s" %s' % (f, job_dir, master))
+        self.running_jobs[job.real_name] = WorkerJobInfo(job.context.job.port, popen)
     
     def clear_job(self, job_name):
         job_name = job_name.replace(' ', '_')
         shutil.rmtree(os.path.join(self.job_dir, job_name))
+        
+    def kill(self, job_name):
+        if job_name in self.running_jobs:
+            self.running_jobs[job_name].popen.kill()
         
     def run(self):
         def _start():

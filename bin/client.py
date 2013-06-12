@@ -28,7 +28,7 @@ import shutil
 from cola.core.rpc import client_call, FileTransportClient
 from cola.core.zip import ZipHandler
 from cola.core.utils import get_ip, import_job
-from cola.job.conf import main_conf
+from cola.core.config import main_conf
 
 class ClientAction(object):
     def __init__(self, master):

@@ -32,7 +32,7 @@ from cola.core.rpc import client_call, ColaRPCServer, \
     FileTransportServer, FileTransportClient
 from cola.core.zip import ZipHandler
 from cola.core.utils import import_job, root_dir
-from cola.job.conf import main_conf
+from cola.core.config import main_conf
 
 RUNNING, HANGUP, STOPPED = range(3)
 CONTINOUS_HEARTBEAT = 60
@@ -42,12 +42,13 @@ HEARTBEAT_CHECK_INTERVAL = 3*HEARTBEAT_INTERVAL
 class MasterWatcherRunning(Exception): pass
 
 class MasterJobInfo(object):
-    def __init__(self, port, nodes_ip_addresses, worker_port):
+    def __init__(self, port, nodes_ip_addresses, worker_port, popen=None):
         self.job_master = '%s:%s' % (get_ip(), port)
         self.nodes = [
             '%s:%s'%(node_ip, worker_port) for node_ip in nodes_ip_addresses
         ]
         self.worker_port = worker_port
+        self.popen = None
         
     def add_worker(self, node):
         if ':' not in node:
@@ -192,11 +193,12 @@ class MasterWatcher(object):
             dirname = os.path.dirname(os.path.abspath(__file__))
             f = os.path.join(dirname, 'loader.py')
             workers = ['%s:%s'%(node, worker_port) for node in nodes]
-            subprocess.Popen('python "%(py)s" "%(job_dir)s" %(nodes)s' % {
+            popen = subprocess.Popen('python "%(py)s" "%(job_dir)s" %(nodes)s' % {
                 'py': f,
                 'job_dir': job_dir,
                 'nodes': ' '.join(workers)
             })
+            info.popen = popen
             
             # call workers to start job
             for worker_watcher in self.nodes_watchers:
@@ -207,6 +209,11 @@ class MasterWatcher(object):
             return False
         job_info = self.running_jobs[job_real_name]
         client_call(job_info.job_master, 'stop')
+        
+        for watcher in self.nodes_watchers.keys():
+            client_call(watcher, 'kill', job_real_name)
+        self.kill(job_real_name)
+        
         return True
     
     def finish_job(self, job_real_name):
@@ -230,6 +237,10 @@ class MasterWatcher(object):
             except socket.error:
                 pass
         self.stopped = True
+        
+    def kill(self, job_realname):
+        if job_realname in self.running_jobs.keys():
+            self.running_jobs[job_realname].popen.kill()
         
     def run(self):
         thread = self.start_check_worker()

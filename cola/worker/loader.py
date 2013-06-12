@@ -26,120 +26,134 @@ import threading
 import signal
 import random
 import sys
+import socket
 
 from cola.core.mq import MessageQueue
 from cola.core.bloomfilter import FileBloomFilter
-from cola.core.rpc import ColaRPCServer, client_call
+from cola.core.rpc import client_call
 from cola.core.utils import get_ip, root_dir
 from cola.core.errors import ConfigurationError
 from cola.core.logs import get_logger
 from cola.core.utils import import_job
 from cola.core.errors import LoginFailure
+from cola.job.loader import JobLoader, LimitionJobLoader
 
 MAX_THREADS_SIZE = 10
 TIME_SLEEP = 10
 BUDGET_REQUIRE = 10
+MAX_ERROR_TIMES = 5
 
-UNLIMIT_BLOOM_FILTER_CAPACITY = 100000
+UNLIMIT_BLOOM_FILTER_CAPACITY = 1000000
 
-class JobLoader(object):
-    def __init__(self, job, rpc_server, 
-                 mq=None, logger=None, master=None, context=None):
+class JobWorkerRunning(Exception): pass
+
+class BasicWorkerJobLoader(JobLoader):
+    def __init__(self, job, data_dir, context=None, logger=None,
+                 local=None, nodes=None, copies=1, force=False):
         self.job = job
-        self.rpc_server = rpc_server
-        self.mq = mq
-        self.master = master
+        ctx = context or self.job.context
+        
+        self.local = local
+        if self.local is None:
+            host, port = get_ip(), ctx.job.port
+            self.local = '%s:%s' % (host, port)
+        else:
+            host, port = tuple(self.local.split(':', 1))
+        self.nodes = nodes
+        if self.nodes is None:
+            self.nodes = [self.local]
+            
         self.logger = logger
+        self.info_logger = get_logger(
+            name='cola_worker_info_%s'%self.job.real_name)
+            
+        super(BasicWorkerJobLoader, self).__init__(
+            self.job, data_dir, self.local, 
+            context=ctx, copies=copies, force=force)
         
-        # If stop
-        self.stopped = False
-        
-        self.ctx = context or self.job.context
+        # instances count that run at the same time
         self.instances = max(min(self.ctx.job.instances, MAX_THREADS_SIZE), 1)
-        self.size =self.ctx.job.size
+        # excecutings
+        self.executings = []
+        # exception times that continously throw
+        self.error_times = 0
+        # budget
         self.budget = 0
         
-        # The execute unit
-        self.executing = None
+        self.check()
+        # init rpc server
+        self.init_rpc_server()
+        # init message queue
+        self.init_mq()
         
         # register signal
         signal.signal(signal.SIGINT, self.signal_handler)
         signal.signal(signal.SIGTERM, self.signal_handler)
         
-        rpc_server.register_function(self.stop, name='stop')
-        rpc_server.register_function(self.add_node, name='add_node')
-        rpc_server.register_function(self.remove_node, name='remove_node')
-        rpc_server.register_function(self.run, name='run')
+        self.rpc_server.register_function(self.stop, name='stop')
+        self.rpc_server.register_function(self.add_node, name='add_node')
+        self.rpc_server.register_function(self.remove_node, name='remove_node')
+        self.rpc_server.register_function(self.run, name='run')
+            
+    def _init_bloom_filter(self):
+        size = self.job.context.job.size
+        base = 1 if not self.job.is_bundle else 1000 
+        bloom_filter_file = os.path.join(self.root, 'bloomfilter')
         
-    def init_mq(self, nodes, local_node, loc, 
-                verify_exists_hook=None, copies=1):
-        mq_store_dir = os.path.join(loc, 'store')
-        mq_backup_dir = os.path.join(loc, 'backup')
+        if not os.path.exists(bloom_filter_file):
+            bloom_filter_size = size*10*base
+        else:
+            if size > 0:
+                bloom_filter_size = size*2*base
+            else:
+                bloom_filter_size = UNLIMIT_BLOOM_FILTER_CAPACITY
+        return FileBloomFilter(bloom_filter_file, bloom_filter_size)
+            
+    def init_mq(self):
+        mq_store_dir = os.path.join(self.root, 'store')
+        mq_backup_dir = os.path.join(self.root, 'backup')
         if not os.path.exists(mq_store_dir):
-            os.mkdir(mq_store_dir)
+            os.makedirs(mq_store_dir)
         if not os.path.exists(mq_backup_dir):
-            os.mkdir(mq_backup_dir)
-        
-        # MQ relative
-        self.mq = MessageQueue(
-            nodes,
-            local_node,
-            self.rpc_server,
-            copies=copies
-        )
+            os.makedirs(mq_backup_dir)
+            
+        self.mq = MessageQueue(self.nodes, self.local, self.rpc_server,
+            copies=self.copies)
         self.mq.init_store(mq_store_dir, mq_backup_dir, 
-                           verify_exists_hook=verify_exists_hook)
+                           verify_exists_hook=self._init_bloom_filter())
         
-    def stop(self):
+    def check(self):
+        env_legal = self.check_env(force=self.force)
+        if not env_legal:
+            raise JobWorkerRunning('There has been a running job worker.')
+        
+    def finish(self):
         self.stopped = True
-        
-        if self.executing is not None:
-            self.mq.put(self.executing)
-        
-        self.finish()
-        
-    def signal_handler(self, signum, frame):
-        self.stop()
+        self.mq.shutdown()
+        for handler in self.logger.handlers:
+            handler.close()
+        super(BasicWorkerJobLoader, self).finish()
         
     def complete(self, obj):
         if self.logger is not None:
             self.logger.info('Finish %s' % obj)
+        if obj in self.executings:
+            self.executings.remove(obj)
         
         if self.ctx.job.size <= 0:
-            return False
-        
-        self.executing = None
-        if self.master is not None:
-            return client_call(self.master, 'complete', obj)
-        else:
-            self.size -= 1
-            # sth to log
-            if self.size <= 0:
-                self.stopped = True
-            return self.stopped
+            return True
+        return False
             
-    def finish(self):
-        self.mq.shutdown()
-        self.stopped = True
+    def error(self, obj):
+        if obj in self.executings:
+            self.executings.remove(obj)
         
-    def _require_budget(self):
-        if self.master is None or self.ctx.job.limits == 0:
-            return
+    def stop(self):
+        self.mq.put(self.executings, force=True)
+        super(BasicWorkerJobLoader, self).stop()
         
-        if self.budget > 0:
-            self.budget -= 1
-            return
-        
-        while self.budget == 0 and not self.stopped:
-            self.budget = client_call(self.master, 'require', BUDGET_REQUIRE)
-            
-    def _log(self, obj, err):
-        if self.logger is not None:
-            self.logger.error('Error when get bundle: %s' % obj)
-            self.logger.exception(err)
-            
-        if self.job.debug:
-            raise err
+    def signal_handler(self, signum, frame):
+        self.stop()
         
     def _login(self, opener):
         if self.job.login_hook is not None:
@@ -151,57 +165,99 @@ class JobLoader(object):
             if not login_success:
                 self.logger.info('login fail')
             return login_success
+        return True
         
-    def _execute(self, obj, opener=None):
+    def _log_error(self, obj, err):
+        if self.logger is not None:
+            self.logger.error('Error when get bundle: %s' % obj)
+            self.logger.exception(err)
+            
+        if self.job.debug:
+            raise err
+        
+    def _require_budget(self, count):
+        raise NotImplementedError
+    
+    def apply(self):
+        raise NotImplementedError
+    
+    def _execute_bundle(self, obj, opener=None):
+        bundle = self.job.unit_cls(obj)
+        urls = bundle.urls()
+        
+        try:
+            while len(urls) > 0 and not self.stopped:
+                url = urls.pop(0)
+                self.info_logger.info('get %s url: %s' % (bundle.label, url))
+                
+                parser_cls = self.job.url_patterns.get_parser(url)
+                if parser_cls is not None:
+                    self._require_budget()
+                    next_urls, bundles = parser_cls(opener, url, bundle=bundle).parse()
+                    next_urls = list(self.job.url_patterns.matches(next_urls))
+                    next_urls.extend(urls)
+                    urls = next_urls
+                    if bundles:
+                        self.mq.put([str(b) for b in bundles])
+                        
+            self.error_times = 0
+        except LoginFailure, e:
+            if not self._login(opener):
+                self.error_times += 1
+                self._log_error(obj, e)
+                self.error(obj)
+        except Exception, e:
+            self.error_times += 1
+            self._log_error(obj, e)
+            self.error(obj)
+            
+    def _execute_url(self, obj, opener=None):
+        self._require_budget()
+        try:
+            parser_cls = self.job.url_patterns.get_parser(obj)
+            if parser_cls is not None:
+                next_urls = parser_cls(opener, obj).parse()
+                next_urls = list(self.job.url_patterns.matches(next_urls))
+                self.mq.put(next_urls)
+                
+            self.error_times = 0
+        except LoginFailure, e:
+            if not self._login(opener):
+                self.error_times += 1
+                self._log_error(obj, e)
+                self.error(obj)
+        except Exception, e:
+            self.error_times += 1
+            self._log_error(obj, e)
+            self.error(obj)
+            
+    def execute(self, obj, opener=None):
+        '''
+        return True means all finished
+        '''
+        # If reaches continous erros maxium
+        if self.error_times >= MAX_ERROR_TIMES:
+            return True
+        
         if opener is None:
             opener = self.job.opener_cls()
             
         if self.job.is_bundle:
-            bundle = self.job.unit_cls(obj)
-            urls = bundle.urls()
-            
-            try:
-                
-                while len(urls) > 0 and not self.stopped:
-                    url = urls.pop(0)
-                    self.logger.info('get %s url: %s' % (bundle.label, url))
-                    
-                    parser_cls = self.job.url_patterns.get_parser(url)
-                    if parser_cls is not None:
-                        self._require_budget()
-                        next_urls, bundles = parser_cls(opener, url, bundle=bundle).parse()
-                        next_urls = list(self.job.url_patterns.matches(next_urls))
-                        next_urls.extend(urls)
-                        urls = next_urls
-                        if bundles:
-                            self.mq.put([str(b) for b in bundles])
-            except LoginFailure:
-                if not self._login(opener):
-                    return
-            except Exception, e:
-                self._log(obj, e)
-                
+            self._execute_bundle(obj, opener=opener)
         else:
-            self._require_budget()
-            
-            try:
-                
-                parser_cls = self.job.url_patterns.get_parser(obj)
-                if parser_cls is not None:
-                    next_urls = parser_cls(opener, obj).parse()
-                    next_urls = list(self.job.url_patterns.matches(next_urls))
-                    self.mq.put(next_urls)
-            
-            except LoginFailure:
-                if not self._login(opener):
-                    return
-            except Exception, e:
-                self._log(obj, e)
-                    
+            self._execute_url(obj, opener=opener)
             
         return self.complete(obj)
         
-    def run(self):
+    def remove_node(self, node):
+        if self.mq is not None:
+            self.mq.remove_node(node)
+            
+    def add_node(self, node):
+        if self.mq is not None:
+            self.mq.add_node(node)
+            
+    def _run(self):
         def _call():
             opener = self.job.opener_cls()
             if not self._login(opener):
@@ -209,14 +265,17 @@ class JobLoader(object):
             
             stopped = False
             while not self.stopped and not stopped:
+                if not self.apply():
+                    return True
+                
                 obj = self.mq.get()
                 print 'start to get %s' % obj
                 if obj is None:
                     time.sleep(TIME_SLEEP)
                     continue
                 
-                self.executing = obj
-                stopped = self._execute(obj, opener=opener)
+                self.executings.append(obj)
+                stopped = self.execute(obj, opener=opener)
                 
         try:
             threads = [threading.Thread(target=_call) for _ in range(self.instances)]
@@ -227,83 +286,136 @@ class JobLoader(object):
         finally:
             self.finish()
             
-    def remove_node(self, node):
-        if self.mq is not None:
-            self.mq.remove_node(node)
+    def run(self):
+        raise NotImplementedError
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, type_, value, traceback):
+        self.finish()
+        
+class StandaloneWorkerJobLoader(LimitionJobLoader, BasicWorkerJobLoader):
+    def __init__(self, job, data_dir, master=None, local=None, nodes=None, 
+                 context=None, logger=None, copies=1, force=False):
+        BasicWorkerJobLoader.__init__(self, job, data_dir, context=context, logger=logger,
+                                      local=local, nodes=nodes, copies=copies, force=force)
+        LimitionJobLoader.__init__(self, self.job, context=context)
+        
+        if self.logger is None:
+            self.logger = get_logger(
+                name='cola_worker_%s'%self.job.real_name,
+                filename=os.path.join(self.root, 'job.log'))
             
-    def add_node(self, node):
-        if self.mq is not None:
-            self.mq.add_node(node)
+        self.init_rate_clear()
+        
+    def finish(self):
+        LimitionJobLoader.finish(self)
+        BasicWorkerJobLoader.finish(self)
+        
+    def stop(self):
+        LimitionJobLoader.stop(self)
+        BasicWorkerJobLoader.stop(self)
+        
+    def complete(self, obj):
+        BasicWorkerJobLoader.complete(self, obj)
+        return LimitionJobLoader.complete(self, obj)
+    
+    def error(self, obj):
+        LimitionJobLoader.error(self, obj)
+        BasicWorkerJobLoader.error(self, obj)
+            
+    def _require_budget(self):
+        if not self.rate_limit or self.stopped:
+            return
+        
+        if self.budget > 0:
+            self.budget -= 1
+            return
+        
+        while self.budget == 0 and not self.stopped:
+            self.budget = self.require(BUDGET_REQUIRE) - 1
+            
+    def run(self, put_starts=True):
+        if put_starts:
+            self.mq.put(self.job.starts)
+        self._run()
+        
+class WorkerJobLoader(BasicWorkerJobLoader):
+    def __init__(self, job, data_dir, master, local=None, nodes=None, 
+                 context=None, logger=None, copies=1, force=False):
+        super(WorkerJobLoader, self).__init__(job, data_dir, context=context, logger=logger, 
+                                              local=local, nodes=nodes, copies=copies, force=force)
+        if self.logger is None:
+            self.logger = get_logger(
+                name='cola_worker_%s'%self.job.real_name,
+                filename=os.path.join(self.root, 'job.log'),
+                server=master.split(':')[0])
+            
+        self.master = master
+        self.run_lock = threading.Lock()
+        self.run_lock.acquire()
+        
+    def apply(self):
+        return client_call(self.master, 'apply')
+            
+    def complete(self, obj):
+        super(WorkerJobLoader, self).complete(obj)
+        return client_call(self.master, 'complete', obj)
+    
+    def error(self, obj):
+        super(WorkerJobLoader, self).error(obj)
+        client_call(self.master, 'error', obj)
+        
+    def _require_budget(self):
+        if self.ctx.job.limits == 0 or self.stopped:
+            return
+        
+        if self.budget > 0:
+            self.budget -= 1
+            return
+        
+        while self.budget == 0 and not self.stopped:
+            self.budget = client_call(self.master, 'require', BUDGET_REQUIRE)
+        
+    def ready_for_run(self):
+        self.run_lock.acquire()
+        self._run()
+        
+    def run(self):
+        self.run_lock.release()
+        
+    def finish(self):
+        super(WorkerJobLoader, self).finish()
+        try:
+            client_call(self.master, 'worker_finish', self.local)
+        except socket.error:
+            pass
 
-def create_rpc_server(job, context=None):
-    ctx = context or job.context
-    rpc_server = ColaRPCServer((get_ip(), ctx.job.port))
-    thd = threading.Thread(target=rpc_server.serve_forever)
-    thd.setDaemon(True)
-    thd.start()
-    return rpc_server
-
-def create_bloom_filter_hook(bloom_filter_file, job):
-    size = job.context.job.size
-    base = 1 if not job.is_bundle else 1000 
-    if not os.path.exists(bloom_filter_file):
-        bloom_filter_size = size*10*base
-    else:
-        if size > 0:
-            bloom_filter_size = size*2*base
-        else:
-            bloom_filter_size = UNLIMIT_BLOOM_FILTER_CAPACITY
-    return FileBloomFilter(bloom_filter_file, bloom_filter_size)
-
-def load_job(path, master=None):
-    if not os.path.exists(path):
+def load_job(job_path, data_path=None, master=None, force=False):
+    if not os.path.exists(job_path):
         raise ValueError('Job definition does not exist.')
         
-    job = import_job(path)
+    job = import_job(job_path)
     
-    holder = os.path.join(
-        root_dir(), 'data', 'worker', 'jobs', job.real_name)
-    mq_holder = os.path.join(holder, 'mq')
-    if not os.path.exists(mq_holder):
-        os.makedirs(mq_holder)
-    
-    # Logger
-    logger = get_logger(os.path.join(holder, 'job.log'))
-    
-    local_node = '%s:%s' % (get_ip(), job.context.job.port)
-    nodes = [local_node]
-    if master is not None:
-        nodes = client_call(master, 'get_nodes')
-    
-    # Bloom filter hook
-    bloom_filter_file = os.path.join(holder, 'bloomfilter')
-    bloom_filter_hook = create_bloom_filter_hook(bloom_filter_file, job)
-    
-    rpc_server = create_rpc_server(job)
-    loader = JobLoader(job, rpc_server, logger=logger, master=master)
-    loader.init_mq(nodes, local_node, mq_holder, 
-                   verify_exists_hook=bloom_filter_hook,
-                   copies=2 if master else 1)
+    if data_path is None:
+        data_path = os.path.join(root_dir(), 'data')
+    root = os.path.join(
+        data_path, 'worker', 'jobs', job.real_name)
+    if not os.path.exists(root):
+        os.makedirs(root)
     
     if master is None:
-        try:
-            loader.mq.put(job.starts)
-            loader.run()
-        finally:
-            rpc_server.shutdown()
+        with StandaloneWorkerJobLoader(job, root, force=force) as job_loader:
+            job_loader.run()
     else:
-        try:
-            client_call(master, 'ready', local_node)
-            
-            def _start():
-                while not loader.stopped: 
-                    time.sleep(TIME_SLEEP)
-                loader.run()
-            thread = threading.Thread(target=_start)
-            thread.start()
-            thread.join()
-        finally:
-            rpc_server.shutdown()
+        nodes = client_call(master, 'get_nodes')
+        local = '%s:%s' % (get_ip(), job.context.job.port)
+        client_call(master, 'ready', local)
+        with WorkerJobLoader(job, root, master, local=local, nodes=nodes, force=force) \
+            as job_loader:
+            client_call(master, 'ready', local)
+            job_loader.ready_for_run()
             
 if __name__ == "__main__":
     if len(sys.argv) < 2:

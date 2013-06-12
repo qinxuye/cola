@@ -48,7 +48,10 @@ try:
 except ImportError:
     raise DependencyNotInstalledError('mongoengine')
 
-user_conf = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'wiki.yaml')
+get_user_conf = lambda s: os.path.join(os.path.dirname(os.path.abspath(__file__)), s)
+user_conf = get_user_conf('test.yaml')
+if not os.path.exists(user_conf):
+    user_conf = get_user_conf('wiki.yaml')
 user_config = Config(user_conf)
 
 starts = [start.url for start in user_config.job.starts]

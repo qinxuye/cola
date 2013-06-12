@@ -45,7 +45,7 @@ class MessageQueue(object):
             
     def _register_rpc(self):
         self.rpc_server.register_function(self.put_backup, 'put_backup')
-        self.rpc_server.register_instance(self.local_store)
+        self.rpc_server.register_function(self.local_store.put, 'put')
             
     def init_store(self, local_store_path, backup_stores_path, 
                    verify_exists_hook=None):
@@ -66,17 +66,17 @@ class MessageQueue(object):
             
         self._register_rpc()
         
-    def _put(self, node, objs):
+    def _put(self, node, objs, force=False):
         if node == self.local_node:
-            self.local_store.put(objs)
+            self.local_store.put(objs, force=force)
         else:
-            client_call(node, 'put', objs)
+            client_call(node, 'put', objs, force)
                 
-    def _put_backup(self, node, src, objs):
+    def _put_backup(self, node, src, objs, force=False):
         if node == self.local_node:
-            self.put_backup(src, objs)
+            self.put_backup(src, objs, force=force)
         else:
-            client_call(node, 'put_backup', src, objs)
+            client_call(node, 'put_backup', src, objs, force)
                 
     def _get(self, node):
         if node == self.local_node:
@@ -84,7 +84,7 @@ class MessageQueue(object):
         else:
             return client_call(node, 'get')
         
-    def put(self, obj_or_objs):
+    def put(self, obj_or_objs, force=False):
         def _check(obj):
             if not isinstance(obj, str):
                 raise ValueError("MessageQueue can only put string objects.")
@@ -118,14 +118,14 @@ class MessageQueue(object):
                 bkup_puts[bkup_node] = kv
         
         for k, v in puts.iteritems():
-            self._put(k, v)
+            self._put(k, v, force=force)
         for k, v in bkup_puts.iteritems():
             for src_node, obs in v.iteritems():
-                self._put_backup(k, src_node, obs)
+                self._put_backup(k, src_node, obs, force=force)
             
-    def put_backup(self, src, obj_or_objs):
+    def put_backup(self, src, obj_or_objs, force=False):
         backup_store = self.backup_stores[src]
-        backup_store.put(obj_or_objs)
+        backup_store.put(obj_or_objs, force=force)
             
     def get(self):
         if self.local_node is not None:

@@ -21,7 +21,7 @@ Created on 2013-5-22
 '''
 
 from cola.core.config import PropertyObject, Config
-from cola.job.conf import main_conf
+from cola.core.config import main_conf
 
 class Context(object):
     def __init__(self, user_conf=None, **user_defines):

@@ -20,6 +20,8 @@ Created on 2013-5-16
 @author: Chine
 '''
 
+import os
+
 from cola.core.errors import DependencyNotInstalledError
 
 try:
@@ -55,3 +57,7 @@ class Config(object):
     
     def __getitem__(self, name):
         return getattr(self.conf, name)
+    
+conf_dir = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'conf')
+main_conf = Config(os.path.join(conf_dir, 'main.yaml'))

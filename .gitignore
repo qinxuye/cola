@@ -4,4 +4,4 @@
 .settings/*
 /data/*
 /data
-/contrib/sina/test.yaml
+*test.yaml

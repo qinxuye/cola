@@ -118,9 +118,9 @@ class Node(object):
             self.map_files.append(path)
             self.file_handles[path] = open(path, 'w+')
                     
-    def put(self, obj):
+    def put(self, obj, force=False):
         if isinstance(obj, (tuple, list)):
-            if self.verify_exists_hook is None:
+            if self.verify_exists_hook is None or force is True:
                 src_obj = obj
                 obj = '\n'.join(obj) + '\n'
             else:
@@ -130,7 +130,7 @@ class Node(object):
                         src_obj.append(itm)
                 obj = '\n'.join(src_obj) + '\n'
         else:
-            if self.verify_exists_hook is None:
+            if self.verify_exists_hook is None or force is True:
                 src_obj = obj
                 obj = obj + '\n'
             else:
@@ -139,6 +139,9 @@ class Node(object):
                     obj = obj + '\n'
                 else:
                     return ''
+                
+        if len(obj.replace('\n', '')) == 0:
+            return ''
             
         # If no file has enough space
         if len(obj) > self.NODE_FILE_SIZE:
@@ -237,5 +240,5 @@ class Node(object):
     def __enter__(self):
         return self
     
-    def __exit__(self):
+    def __exit__(self, type_, value, traceback):
         self.shutdown()

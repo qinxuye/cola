@@ -24,13 +24,13 @@ import subprocess
 import os
 
 from cola.core.utils import root_dir, get_ip
-from cola.job.conf import main_conf
+from cola.core.config import main_conf
 
 def start_worker(master):
     path = os.path.join(root_dir(), 'cola', 'worker', 'watcher.py')
     
     print 'Start worker at %s:%s' % (get_ip(), main_conf.worker.port)
-    print 'Worker will run in background.'
+    print 'Worker will run in background. Please do not shut down the terminal.'
     
     subprocess.Popen(['python', path, master])
     

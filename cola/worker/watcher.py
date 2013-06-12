@@ -41,21 +41,59 @@ class WorkerJobInfo(object):
         self.popen = popen
 
 class WorkerWatcher(object):
-    def __init__(self, rpc_server, master, zip_dir, job_dir):
-        self.rpc_server = rpc_server
+    def __init__(self, master, root, zip_dir, job_dir, force=False):
         self.master = master
-        self.node = '%s:%s' % (get_ip(), main_conf.worker.port)
+        self.host = get_ip()
+        self.port = main_conf.worker.port
+        self.node = '%s:%s' % (self.host, self.port)
+        
+        self.root = root
         self.zip_dir = zip_dir
         self.job_dir = job_dir
+        self.force = force
         
         self.stopped = False
         
         self.running_jobs = {}
         
+        self.check(force=force)
+        self.init_rpc_server()
+        
         self.rpc_server.register_function(self.stop, 'stop')
         self.rpc_server.register_function(self.start_job, 'start_job')
         self.rpc_server.register_function(self.clear_job, 'clear_job')
         self.set_file_receiver(self.zip_dir)
+        
+    def init_rpc_server(self):
+        rpc_server = ColaRPCServer((self.host, self.port))
+        thd = threading.Thread(target=rpc_server.serve_forever)
+        thd.setDaemon(True)
+        thd.start()
+        self.rpc_server = rpc_server
+        
+    def check(self, force=False):
+        if not self.check_env(force=force):
+            raise WorkerWatcherRunning('There has been a running master watcher.')
+        
+    def check_env(self, force=False):
+        lock_f = os.path.join(self.root, 'lock')
+        if os.path.exists(lock_f) and not force:
+            return False
+        if os.path.exists(lock_f) and force:
+            try:
+                os.remove(lock_f)
+            except:
+                return False
+            
+        open(lock_f, 'w').close()
+        return True
+    
+    def finish(self):
+        lock_f = os.path.join(self.root, 'lock')
+        if os.path.exists(lock_f):
+            os.remove(lock_f)
+        self.rpc_server.shutdown()
+        self.stopped = True
         
     def set_file_receiver(self, base_dir):
         serv = FileTransportServer(self.rpc_server, base_dir)
@@ -101,18 +139,17 @@ class WorkerWatcher(object):
         thread.join()
         
     def stop(self):
-        self.stopped = True
+        self.finish()
+        
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, type_, value, traceback):
+        self.finish()
         
 def makedirs(dir_):
     if not os.path.exists(dir_):
         os.makedirs(dir_)
-        
-def create_rpc_server():
-    rpc_server = ColaRPCServer((get_ip(), main_conf.worker.port))
-    thd = threading.Thread(target=rpc_server.serve_forever)
-    thd.setDaemon(True)
-    thd.start()
-    return rpc_server
 
 if __name__ == "__main__":
     import sys
@@ -123,24 +160,13 @@ if __name__ == "__main__":
     if ':' not in master:
         master = '%s:%s' % (master, main_conf.master.port)
     
-    root = root_dir()
-    worker_watcher_dir = os.path.join(root, 'data', 'worker', 'watcher')
-    makedirs(worker_watcher_dir)
-    zip_dir = os.path.join(root, 'data', 'zip')
-    makedirs(zip_dir)
-    job_dir = os.path.join(root, 'data', 'jobs')
-    makedirs(job_dir)
+    data_path = os.path.join(root_dir(), 'data')
+    root = os.path.join(data_path, 'worker', 'watcher')
+    zip_dir = os.path.join(data_path, 'zip')
+    job_dir = os.path.join(data_path, 'jobs')
+    for dir_ in (root, zip_dir, job_dir):
+        makedirs(dir_)
     
-    lock_f = os.path.join(worker_watcher_dir, 'lock')
-    if os.path.exists(lock_f):
-        raise WorkerWatcherRunning('There has been a running master watcher.')
-    
-    rpc_server = create_rpc_server()
-    try:
-        open(lock_f, 'w').close()
-        
-        master_watcher = WorkerWatcher(rpc_server, master, zip_dir, job_dir)
+    with WorkerWatcher(master, root, zip_dir, job_dir) \
+        as master_watcher:
         master_watcher.run()
-    finally:
-        rpc_server.shutdown()
-        os.remove(lock_f)

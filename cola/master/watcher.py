@@ -78,17 +78,22 @@ class WatcherInfo(object):
         self.last_update = int(time.time())
 
 class MasterWatcher(object):
-    def __init__(self, rpc_server, zip_dir, job_dir):
-        self.rpc_server = rpc_server
+    def __init__(self, root, zip_dir, job_dir, force=False):
+        self.root = root
         self.zip_dir = zip_dir
         self.job_dir = job_dir
+        self.force = force
         
         self.nodes_watchers = {}
         self.running_jobs = {}
         self.black_list = []
         self.ip_address = get_ip()
+        self.port = main_conf.master.port
         
         self.stopped = False
+        
+        self.check(force=force)
+        self.init_rpc_server()
         
         self.rpc_server.register_function(self.register_watcher_heartbeat, 
                                           'register_heartbeat')
@@ -102,6 +107,37 @@ class MasterWatcher(object):
         self.rpc_server.register_function(self.list_workers, 'list_workers')
         
         self.set_receiver(zip_dir)
+        
+    def init_rpc_server(self):
+        rpc_server = ColaRPCServer((self.ip_address, self.port))
+        thd = threading.Thread(target=rpc_server.serve_forever)
+        thd.setDaemon(True)
+        thd.start()
+        self.rpc_server = rpc_server
+        
+    def check(self, force=False):
+        if not self.check_env(force=force):
+            raise MasterWatcherRunning('There has been a running master watcher.')
+        
+    def check_env(self, force=False):
+        lock_f = os.path.join(self.root, 'lock')
+        if os.path.exists(lock_f) and not force:
+            return False
+        if os.path.exists(lock_f) and force:
+            try:
+                os.remove(lock_f)
+            except:
+                return False
+            
+        open(lock_f, 'w').close()
+        return True
+    
+    def finish(self):
+        lock_f = os.path.join(self.root, 'lock')
+        if os.path.exists(lock_f):
+            os.remove(lock_f)
+        self.rpc_server.shutdown()
+        self.stopped = True
         
     def register_watcher_heartbeat(self, node_watcher):
         if node_watcher not in self.nodes_watchers:
@@ -236,7 +272,7 @@ class MasterWatcher(object):
                 client_call(job_info.job_master, 'stop')
             except socket.error:
                 pass
-        self.stopped = True
+        self.finish()
         
     def kill(self, job_realname):
         if job_realname in self.running_jobs.keys():
@@ -246,36 +282,24 @@ class MasterWatcher(object):
         thread = self.start_check_worker()
         thread.join()
         
-def makedirs(path):
-    if not os.path.exists(master_watcher_dir):
-        os.makedirs(master_watcher_dir)
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, type_, value, traceback):
+        self.finish()
         
-def create_rpc_server():
-    rpc_server = ColaRPCServer((get_ip(), main_conf.master.port))
-    thd = threading.Thread(target=rpc_server.serve_forever)
-    thd.setDaemon(True)
-    thd.start()
-    return rpc_server
+def makedirs(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
         
 if __name__ == "__main__":
-    root = root_dir()
-    master_watcher_dir = os.path.join(root, 'data', 'master', 'watcher')
-    makedirs(master_watcher_dir)
-    zip_dir = os.path.join(root, 'data', 'zip')
-    makedirs(zip_dir)
-    job_dir = os.path.join(root, 'data', 'jobs')
-    makedirs(job_dir)
+    data_path = os.path.join(root_dir(), 'data')
+    root = os.path.join(data_path, 'master', 'watcher')
+    zip_dir = os.path.join(data_path, 'zip')
+    job_dir = os.path.join(data_path, 'jobs')
+    for dir_ in (root, zip_dir, job_dir):
+        makedirs(dir_)
     
-    lock_f = os.path.join(master_watcher_dir, 'lock')
-    if os.path.exists(lock_f):
-        raise MasterWatcherRunning('There has been a running master watcher.')
-    
-    rpc_server = create_rpc_server()
-    try:
-        open(lock_f, 'w').close()
-        
-        master_watcher = MasterWatcher(rpc_server, zip_dir, job_dir)
+    with MasterWatcher(root, zip_dir, job_dir) \
+        as master_watcher:
         master_watcher.run()
-    finally:
-        rpc_server.shutdown()
-        os.remove(lock_f)

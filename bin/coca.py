@@ -39,7 +39,7 @@ registered_func = {}
 
 def _client_call(*args):
     try:
-        client_call(*args)
+        return client_call(*args)
     except socket.error:
         logger.error('Cannot connect to cola master')
 
@@ -156,7 +156,7 @@ def runLocalJob(master, job_path):
         shutil.rmtree(dir_)
     
     logger.info('Start to run job.')    
-    client_call(master, 'start_job', zip_filename, True, client)
+    _client_call(master, 'start_job', zip_filename, True, client)
     thread.join()
     
 @register
@@ -168,7 +168,7 @@ def showRemoteJobs(master):
     logger.info('Quering the cola cluster...')
     
     print 'Available jobs: '
-    for dir_ in client_call(master, 'list_job_dirs'):
+    for dir_ in _client_call(master, 'list_job_dirs'):
         print dir_
     
 @register
@@ -178,7 +178,7 @@ def runRemoteJob(master, job_dir_name):
     '''
     
     logger.info('Checking if job dir name exists...')
-    if job_dir_name not in client_call(master, 'list_job_dirs'):
+    if job_dir_name not in _client_call(master, 'list_job_dirs'):
         logger.error('Remote job dir not exists!')
     else:
         logger.info('Start to run job.')
@@ -186,7 +186,7 @@ def runRemoteJob(master, job_dir_name):
         start_log_server()
         thread = start_rpc_server()
         
-        client_call(master, 'start_job', job_dir_name, False, client)
+        _client_call(master, 'start_job', job_dir_name, False, client)
         thread.join()
         
 @register
@@ -198,7 +198,7 @@ def showRunningJobsNames(master):
     logger.info('Querying the cola cluster...')
     
     print 'Running jobs\' names: '
-    for job_name in client_call(master, 'list_jobs'):
+    for job_name in _client_call(master, 'list_jobs'):
         print job_name
         
 @register
@@ -207,13 +207,13 @@ def stopRunningJobByName(master, job_name):
     stop running job by its name
     '''
     
-    if job_name not in client_call(master, 'list_jobs'):
+    if job_name not in _client_call(master, 'list_jobs'):
         logger.error('The job with name(%s) not running in cola cluster' % job_name)
         logger.info('Please run command `python coca.py --showRunningJobsNames` to check job names.')
     else:
         logger.info('Trying to stop job with name(%s).' % job_name)
         
-        client_call(master, 'stop_job', job_name)
+        _client_call(master, 'stop_job', job_name)
         
         logger.info('Job with name(%s) is shutting down, '
                     'and it will take a few seconds to complete.')

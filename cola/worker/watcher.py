@@ -41,7 +41,8 @@ class WorkerJobInfo(object):
         self.popen = popen
 
 class WorkerWatcher(object):
-    def __init__(self, master, root, zip_dir, job_dir, force=False):
+    def __init__(self, master, root, zip_dir, job_dir, 
+                 data_path=None, force=False):
         self.master = master
         self.host = get_ip()
         self.port = main_conf.worker.port
@@ -50,6 +51,7 @@ class WorkerWatcher(object):
         self.root = root
         self.zip_dir = zip_dir
         self.job_dir = job_dir
+        self.data_path = data_path
         self.force = force
         
         self.stopped = False
@@ -60,6 +62,7 @@ class WorkerWatcher(object):
         self.init_rpc_server()
         
         self.rpc_server.register_function(self.stop, 'stop')
+        self.rpc_server.register_function(self.kill, 'kill')
         self.rpc_server.register_function(self.start_job, 'start_job')
         self.rpc_server.register_function(self.clear_job, 'clear_job')
         self.set_file_receiver(self.zip_dir)
@@ -116,7 +119,12 @@ class WorkerWatcher(object):
         dirname = os.path.dirname(os.path.abspath(__file__))
         f = os.path.join(dirname, 'loader.py')
         
-        popen = subprocess.Popen('python "%s" "%s" %s' % (f, job_dir, master))
+        cmds = ['python', f, '-j', job_dir, '-m', master]
+        if self.data_path is not None:
+            cmds.extend(['-d', self.data_path])
+        if self.force:
+            cmds.append('-f')
+        popen = subprocess.Popen(cmds)
         self.running_jobs[job.real_name] = WorkerJobInfo(job.context.job.port, popen)
     
     def clear_job(self, job_name):
@@ -152,21 +160,32 @@ def makedirs(dir_):
         os.makedirs(dir_)
 
 if __name__ == "__main__":
-    import sys
+    import argparse
     
-    if len(sys.argv) < 2:
-        raise ValueError('Worker watcher need at least 1 parameters.')
-    master = sys.argv[1]
+    parser = argparse.ArgumentParser('Cola worker watcher')
+    parser.add_argument('-m', '--master', metavar='master watcher', required=True,
+                        help='master connected to(in the former of `ip:port` or `ip`)')
+    parser.add_argument('-d', '--data', metavar='data root directory', nargs='?',
+                        default=None, const=None, 
+                        help='root directory to put data')
+    parser.add_argument('-f', '--force', metavar='force start', nargs='?',
+                        default=False, const=True, type=bool)
+    args = parser.parse_args()
+    
+    data_path = args.data
+    if data_path is None:
+        data_path = os.path.join(root_dir(), 'data')
+    force = args.force
+    master = args.master
     if ':' not in master:
         master = '%s:%s' % (master, main_conf.master.port)
-    
-    data_path = os.path.join(root_dir(), 'data')
+        
     root = os.path.join(data_path, 'worker', 'watcher')
     zip_dir = os.path.join(data_path, 'zip')
     job_dir = os.path.join(data_path, 'jobs')
     for dir_ in (root, zip_dir, job_dir):
         makedirs(dir_)
     
-    with WorkerWatcher(master, root, zip_dir, job_dir) \
+    with WorkerWatcher(master, root, zip_dir, job_dir, data_path=data_path, force=force) \
         as master_watcher:
         master_watcher.run()

@@ -28,7 +28,7 @@ try:
 except ImportError:
     import pickle
 
-def get_logger(filename=None, server=None, name='cola'):
+def get_logger(name='cola', filename=None, server=None, is_master=False):
     logger = logging.getLogger(name)
     logger.setLevel(logging.INFO)
     
@@ -39,6 +39,8 @@ def get_logger(filename=None, server=None, name='cola'):
         handler = logging.FileHandler(filename)
         formatter = logging.Formatter('%(asctime)s - %(module)s.%(funcName)s.%(lineno)d - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
+        if is_master:
+            handler.setLevel(logging.ERROR)
         logger.addHandler(handler)
     
     if server is not None:
@@ -48,10 +50,22 @@ def get_logger(filename=None, server=None, name='cola'):
             port = logging.handlers.DEFAULT_TCP_LOGGING_PORT
             
         socket_handler = logging.handlers.SocketHandler(server, port)
-        socket_handler.setLevel(logging.ERROR)
+        socket_handler.setLevel(logging.INFO)
         logger.addHandler(socket_handler)
-    
+        
     return logger
+
+def add_log_client(logger, client):
+    if ':' in client:
+        client, port = tuple(client.split(':', 1))
+    else:
+        port = logging.handlers.DEFAULT_TCP_LOGGING_PORT
+        
+    socket_handler = logging.handlers.SocketHandler(client, port)
+    socket_handler.setLevel(logging.INFO)
+    logger.addHandler(socket_handler)
+    
+    return socket_handler
 
 class LogRecordStreamHandler(SocketServer.StreamRequestHandler):
     def handle(self):

@@ -26,13 +26,28 @@ import os
 from cola.core.utils import root_dir, get_ip
 from cola.core.config import main_conf
 
-def start_master():
+def start_master(data_path=None, force=False):
     path = os.path.join(root_dir(), 'cola', 'master', 'watcher.py')
     
     print 'Start master at %s:%s' % (get_ip(), main_conf.master.port)
     print 'Master will run in background. Please do not shut down the terminal.'
     
-    subprocess.Popen(['python', path])
+    cmds = ['python', path]
+    if data_path is not None:
+        cmds.extend(['-d', data_path])
+    if force is True:
+        cmds.append('-f')
+    subprocess.Popen(cmds)
 
 if __name__ == "__main__":
-    start_master()
+    import argparse
+    
+    parser = argparse.ArgumentParser('Cola master')
+    parser.add_argument('-d', '--data', metavar='data root directory', nargs='?',
+                        default=None, const=None, 
+                        help='root directory to put data')
+    parser.add_argument('-f', '--force', metavar='force start', nargs='?',
+                        default=False, const=True, type=bool)
+    args = parser.parse_args()
+    
+    start_master(args.data, args.force)

@@ -6,6 +6,8 @@ master:
   port: 11103
 worker:
   port: 11203
+client:
+  port: 11303
 job:
   db: cola
   mode: url # also can be `bundle`

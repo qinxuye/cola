@@ -13,3 +13,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 '''
+
+
+version_tuple = (0, 0, 1)
+
+def get_version_string():
+    if isinstance(version_tuple[-1], basestring):
+        return '.'.join(map(str, version_tuple[:-1])) + version_tuple[-1]
+    return '.'.join(map(str, version_tuple))
+
+VERSION = get_version_string()
+__version__ = VERSION
+__copyright__ = "Copyright (c) 2013 Qin Xuye"
+__license__ = "Apache 2.0"

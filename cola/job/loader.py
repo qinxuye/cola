@@ -93,7 +93,7 @@ class LimitionJobLoader(object):
         self.started = 0
         self.completed = 0
         
-        self.rate = self.ctx.job.limits
+        self.rate = self.ctx.job.limit
         self.rate_limit = self.rate > 0
         self.current_rate = 0
         

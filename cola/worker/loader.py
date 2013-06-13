@@ -25,7 +25,6 @@ import time
 import threading
 import signal
 import random
-import sys
 import socket
 
 from cola.core.mq import MessageQueue
@@ -130,9 +129,11 @@ class BasicWorkerJobLoader(JobLoader):
     def finish(self):
         self.stopped = True
         self.mq.shutdown()
-        for handler in self.logger.handlers:
-            handler.close()
-        super(BasicWorkerJobLoader, self).finish()
+        try:
+            for handler in self.logger.handlers:
+                handler.close()
+        finally:
+            super(BasicWorkerJobLoader, self).finish()
         
     def complete(self, obj):
         if self.logger is not None:
@@ -334,7 +335,10 @@ class StandaloneWorkerJobLoader(LimitionJobLoader, BasicWorkerJobLoader):
             return
         
         while self.budget == 0 and not self.stopped:
-            self.budget = self.require(BUDGET_REQUIRE) - 1
+            self.budget = self.require(BUDGET_REQUIRE)
+            if self.budget > 0:
+                self.budget -= 1
+                return
             
     def run(self, put_starts=True):
         if put_starts:
@@ -377,6 +381,9 @@ class WorkerJobLoader(BasicWorkerJobLoader):
         
         while self.budget == 0 and not self.stopped:
             self.budget = client_call(self.master, 'require', BUDGET_REQUIRE)
+            if self.budget > 0:
+                self.budget -= 1
+                return
         
     def ready_for_run(self):
         self.run_lock.acquire()
@@ -418,11 +425,23 @@ def load_job(job_path, data_path=None, master=None, force=False):
             job_loader.ready_for_run()
             
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        raise ValueError('Worker job loader need at least 1 parameters.')
+    import argparse
     
-    path = sys.argv[1]
-    master = None
-    if len(sys.argv) > 2:
-        master = sys.argv[2]
-    load_job(path, master=master)
+    parser = argparse.ArgumentParser('Cola job loader')
+    parser.add_argument('-j', '--job', metavar='job directory', required=True,
+                        help='job directory to run')
+    parser.add_argument('-d', '--data', metavar='data root directory', nargs='?',
+                        default=None, const=None, 
+                        help='root directory to put data')
+    parser.add_argument('-m', '--master', metavar='master job loader', nargs='?',
+                        default=None, const=None,
+                        help='master connected to(in the former of `ip:port`)')
+    parser.add_argument('-f', '--force', metavar='force start', nargs='?',
+                        default=False, const=True, type=bool)
+    args = parser.parse_args()
+    
+    path = args.job
+    data_path = args.data
+    master = args.master
+    force = args.force
+    load_job(path, data_path=data_path, master=master, force=force)

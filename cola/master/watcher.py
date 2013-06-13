@@ -25,7 +25,6 @@ import threading
 import os
 import subprocess
 import shutil
-import socket
 
 from cola.core.utils import get_ip
 from cola.core.rpc import client_call, ColaRPCServer, \
@@ -78,10 +77,12 @@ class WatcherInfo(object):
         self.last_update = int(time.time())
 
 class MasterWatcher(object):
-    def __init__(self, root, zip_dir, job_dir, force=False):
+    def __init__(self, root, zip_dir, job_dir, 
+                 data_path=None, force=False):
         self.root = root
         self.zip_dir = zip_dir
         self.job_dir = job_dir
+        self.data_path = data_path
         self.force = force
         
         self.nodes_watchers = {}
@@ -201,7 +202,7 @@ class MasterWatcher(object):
         serv = FileTransportServer(self.rpc_server, base_dir)
         return serv
     
-    def start_job(self, zip_filename, uncompress=True):
+    def start_job(self, zip_filename, uncompress=True, client=None):
         if uncompress:
             zip_file = os.path.join(self.zip_dir, zip_filename)
             
@@ -229,11 +230,15 @@ class MasterWatcher(object):
             dirname = os.path.dirname(os.path.abspath(__file__))
             f = os.path.join(dirname, 'loader.py')
             workers = ['%s:%s'%(node, worker_port) for node in nodes]
-            popen = subprocess.Popen('python "%(py)s" "%(job_dir)s" %(nodes)s' % {
-                'py': f,
-                'job_dir': job_dir,
-                'nodes': ' '.join(workers)
-            })
+            
+            cmds = ['python', f, '-j', job_dir, '-n', ' '.join(workers)]
+            if self.data_path is not None:
+                cmds.extend(['-d', self.data_path])
+            if self.force:
+                cmds.append('-f')
+            if client is not None:
+                cmds.extend(['-c', client])
+            popen = subprocess.Popen(cmds)
             info.popen = popen
             
             # call workers to start job
@@ -264,14 +269,12 @@ class MasterWatcher(object):
             client_call(watcher, 'clear_job')
     
     def stop(self):
+        # stop all jobs
+        for job_name in self.running_jobs.keys():
+            self.stop_job(job_name)
+            
         for watcher in self.nodes_watchers:
             client_call(watcher, 'stop')
-        # stop all jobs
-        for job_info in self.running_jobs.values():
-            try:
-                client_call(job_info.job_master, 'stop')
-            except socket.error:
-                pass
         self.finish()
         
     def kill(self, job_realname):
@@ -293,13 +296,27 @@ def makedirs(path):
         os.makedirs(path)
         
 if __name__ == "__main__":
-    data_path = os.path.join(root_dir(), 'data')
+    import argparse
+    
+    parser = argparse.ArgumentParser('Cola master watcher')
+    parser.add_argument('-d', '--data', metavar='data root directory', nargs='?',
+                        default=None, const=None, 
+                        help='root directory to put data')
+    parser.add_argument('-f', '--force', metavar='force start', nargs='?',
+                        default=False, const=True, type=bool)
+    args = parser.parse_args()
+    
+    data_path = args.data
+    if data_path is None:
+        data_path = os.path.join(root_dir(), 'data')
+    force = args.force
+        
     root = os.path.join(data_path, 'master', 'watcher')
     zip_dir = os.path.join(data_path, 'zip')
     job_dir = os.path.join(data_path, 'jobs')
     for dir_ in (root, zip_dir, job_dir):
         makedirs(dir_)
     
-    with MasterWatcher(root, zip_dir, job_dir) \
+    with MasterWatcher(root, zip_dir, job_dir, data_path=data_path, force=force) \
         as master_watcher:
         master_watcher.run()

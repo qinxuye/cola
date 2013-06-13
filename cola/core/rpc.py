@@ -24,6 +24,7 @@ import SocketServer
 from SimpleXMLRPCServer import SimpleXMLRPCServer
 import xmlrpclib
 import os
+import socket
 
 class ColaRPCServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     
@@ -32,9 +33,16 @@ class ColaRPCServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
         self.allow_none = True
     
         
-def client_call(server, func_name, *args):
+def client_call(server, func_name, *args, **kwargs):
     serv = xmlrpclib.ServerProxy('http://%s' % server)
-    return getattr(serv, func_name)(*args)
+    ignore = kwargs.get('ignore', False)
+    if not ignore:
+        return getattr(serv, func_name)(*args)
+    else:
+        try:
+            return getattr(serv, func_name)(*args)
+        except socket.error:
+            pass
 
 class FileTransportServer(object):
     def __init__(self, rpc_server, dirname):

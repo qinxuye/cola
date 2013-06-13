@@ -24,12 +24,12 @@ import threading
 import signal
 import socket
 import os
-import sys
 
 from cola.core.rpc import client_call
 from cola.core.mq.client import MessageQueueClient
 from cola.core.utils import get_ip, root_dir, import_job
-from cola.core.logs import LogRecordSocketReceiver, get_logger
+from cola.core.logs import LogRecordSocketReceiver, get_logger, \
+                            add_log_client
 from cola.core.config import main_conf
 from cola.job.loader import JobLoader, LimitionJobLoader
 
@@ -38,7 +38,8 @@ class JobMasterRunning(Exception): pass
 TIME_SLEEP = 10
 
 class MasterJobLoader(LimitionJobLoader, JobLoader):
-    def __init__(self, job, data_dir, nodes, context=None, copies=1, force=False):
+    def __init__(self, job, data_dir, nodes, client=None,
+                 context=None, copies=1, force=False):
         ctx = context or job.context
         master_port = ctx.job.master_port
         local = '%s:%s' % (get_ip(), master_port)
@@ -66,13 +67,19 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
         # logger
         self.logger = get_logger(
             name='cola_master_%s'%self.job.real_name,
-            filename=os.path.join(self.root, 'job.log'))
+            filename=os.path.join(self.root, 'job.log'),
+            is_master=True)
+        self.client = client
+        self.client_handler = None
+        if self.client is not None:
+            self.client_handler = add_log_client(self.logger, self.client)
         
         self.init_rpc_server()
         self.init_rate_clear()
         self.init_logger_server(self.logger)
         
         # register rpc server
+        self.rpc_server.register_function(self.client_stop, 'client_stop')
         self.rpc_server.register_function(self.ready, 'ready')
         self.rpc_server.register_function(self.worker_finish, 'worker_finish')
         self.rpc_server.register_function(self.complete, 'complete')
@@ -97,6 +104,10 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
             self.log_server.shutdown()
             self.log_server.stop()
             
+    def client_stop(self):
+        if self.client_handler is not None:
+            self.logger.removeHandler(self.client_handler)
+                
     def check(self):
         env_legal = self.check_env(force=self.force)
         if not env_legal:
@@ -117,6 +128,14 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
         self.stop_logger_server()
         for handler in self.logger.handlers:
             handler.close()
+            
+        if self.client is not None:
+            rpc_client = '%s:%s' % (
+                self.client.split(':')[0], 
+                main_conf.client.port
+            )
+            client_call(rpc_client, 'stop', ignore=True)
+            
         self.stopped = True
         
     def stop(self):
@@ -178,7 +197,8 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
     def __exit__(self, type_, value, traceback):
         self.finish()
 
-def load_job(job_path, nodes, data_path=None, context=None, force=False):
+def load_job(job_path, nodes, data_path=None, 
+             client=None, context=None, force=False):
     if not os.path.exists(job_path):
         raise ValueError('Job definition does not exist.')
         
@@ -190,13 +210,32 @@ def load_job(job_path, nodes, data_path=None, context=None, force=False):
     if not os.path.exists(root):
         os.makedirs(root)
     
-    with MasterJobLoader(job, root, nodes, context=context, force=force) as job_loader:
+    with MasterJobLoader(job, root, nodes, client=client, 
+                         context=context, force=force) as job_loader:
         job_loader.run()
     
 if __name__ == '__main__':
-    if len(sys.argv) < 3:
-        raise ValueError('Master job loader need at least 2 parameters.')
+    import argparse
     
-    path = sys.argv[1]
-    nodes = sys.argv[2:]
-    load_job(path, nodes)
+    parser = argparse.ArgumentParser('Cola job loader')
+    parser.add_argument('-j', '--job', metavar='job directory', required=True,
+                        help='job directory to run')
+    parser.add_argument('-d', '--data', metavar='data root directory', nargs='?',
+                        default=None, const=None, 
+                        help='root directory to put data')
+    parser.add_argument('-f', '--force', metavar='force start', nargs='?',
+                        default=False, const=True, type=bool)
+    parser.add_argument('-n', '--nodes', metavar='worker job loaders', required=True, nargs='+',
+                        help='worker connected(each in the former of `ip:port`)')
+    parser.add_argument('-c', '--client', metavar='client', nargs='?',
+                        default=None, const=None,
+                        help='client which starts the job')
+    args = parser.parse_args()
+    
+    path = args.job
+    data_path = args.data
+    nodes = args.nodes
+    force = args.force
+    client = args.client
+    load_job(path, nodes, data_path=data_path, 
+             client=client, force=force)

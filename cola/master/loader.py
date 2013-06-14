@@ -96,7 +96,7 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
         signal.signal(signal.SIGTERM, self.signal_handler)
         
     def init_logger_server(self, logger):
-        self.log_server = LogRecordSocketReceiver(logger=logger)
+        self.log_server = LogRecordSocketReceiver(host=get_ip(), logger=logger)
         threading.Thread(target=self.log_server.serve_forever).start()
         
     def stop_logger_server(self):
@@ -126,8 +126,12 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
         LimitionJobLoader.finish(self)
         JobLoader.finish(self)
         self.stop_logger_server()
-        for handler in self.logger.handlers:
-            handler.close()
+        
+        try:
+            for handler in self.logger.handlers:
+                handler.close()
+        except:
+            pass
             
         if self.client is not None:
             rpc_client = '%s:%s' % (
@@ -178,7 +182,7 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
     def run(self):
         self.ready_lock.acquire()
         
-        if not self.stopped:
+        if not self.stopped and len(self.not_registered) == 0:
             self.mq_client.put(self.job.starts)
             for node in self.nodes:
                 client_call(node, 'run')

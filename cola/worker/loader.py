@@ -100,7 +100,10 @@ class BasicWorkerJobLoader(JobLoader):
         bloom_filter_file = os.path.join(self.root, 'bloomfilter')
         
         if not os.path.exists(bloom_filter_file):
-            bloom_filter_size = size*10*base
+            if size > 0:
+                bloom_filter_size = size*10*base
+            else:
+                bloom_filter_size = UNLIMIT_BLOOM_FILTER_CAPACITY
         else:
             if size > 0:
                 bloom_filter_size = size*2*base

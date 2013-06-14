@@ -249,11 +249,13 @@ class MasterWatcher(object):
         if job_real_name not in self.running_jobs:
             return False
         job_info = self.running_jobs[job_real_name]
-        client_call(job_info.job_master, 'stop')
         
-        for watcher in self.nodes_watchers.keys():
-            client_call(watcher, 'kill', job_real_name)
-        self.kill(job_real_name)
+        try:
+            client_call(job_info.job_master, 'stop')
+        finally:
+            for watcher in self.nodes_watchers.keys():
+                client_call(watcher, 'kill', job_real_name)
+            self.kill(job_real_name)
         
         return True
     

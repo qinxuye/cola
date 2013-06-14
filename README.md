@@ -14,6 +14,6 @@ Why named cola? hmm, I like cola, and cola sounds a bit like crawler.
 
 ##Tips
 
-* I am trying my best to make cola stable and write docs.
-* Chineses docs will come soon.
+* [Chinese docs(wiki)](https://github.com/chineking/cola/wiki).
+* I am trying my best to make cola stable.
 * Cola can also run in a single machine, you don't need to start master, workers and so on. Everything is simple!

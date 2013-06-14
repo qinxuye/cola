@@ -45,7 +45,7 @@ class MessageQueue(object):
             
     def _register_rpc(self):
         self.rpc_server.register_function(self.put_backup, 'put_backup')
-        self.rpc_server.register_function(self.local_store.put, 'put')
+        self.rpc_server.register_instance(self.local_store)
             
     def init_store(self, local_store_path, backup_stores_path, 
                    verify_exists_hook=None):

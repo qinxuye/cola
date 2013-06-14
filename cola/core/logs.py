@@ -46,6 +46,7 @@ def get_logger(name='cola', filename=None, server=None, is_master=False):
     if server is not None:
         if ':' in server:
             server, port = tuple(server.split(':', 1))
+            port = int(port)
         else:
             port = logging.handlers.DEFAULT_TCP_LOGGING_PORT
             
@@ -58,6 +59,7 @@ def get_logger(name='cola', filename=None, server=None, is_master=False):
 def add_log_client(logger, client):
     if ':' in client:
         client, port = tuple(client.split(':', 1))
+        port = int(port)
     else:
         port = logging.handlers.DEFAULT_TCP_LOGGING_PORT
         

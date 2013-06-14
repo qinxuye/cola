@@ -38,6 +38,7 @@ class Test(unittest.TestCase):
 
     def testLog(self):
         self.client_logger.error('Sth happens here')
+        self.client_logger.info('sth info here')
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testLog']

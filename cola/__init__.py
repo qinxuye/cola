@@ -15,7 +15,7 @@ limitations under the License.
 '''
 
 
-version_tuple = (0, 0, 1)
+version_tuple = (0, 1, 0)
 
 def get_version_string():
     if isinstance(version_tuple[-1], basestring):

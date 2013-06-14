@@ -65,7 +65,8 @@ def start_log_server():
     
     if log_server is not None:
         return
-    log_server = LogRecordSocketReceiver(logger=logger, port=log_server_port)
+    log_server = LogRecordSocketReceiver(logger=logger, host=get_ip(), 
+                                         port=log_server_port)
     threading.Thread(target=log_server.serve_forever).start()
     
 def stop_log_server():

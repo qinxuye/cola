@@ -86,8 +86,8 @@ class MessageQueue(object):
         
     def put(self, obj_or_objs, force=False):
         def _check(obj):
-            if not isinstance(obj, str):
-                raise ValueError("MessageQueue can only put string objects.")
+            if not isinstance(obj, basestring):
+                raise ValueError("MessageQueue can only put basestring objects.")
         if isinstance(obj_or_objs, (tuple, list)):
             for obj in obj_or_objs:
                 _check(obj)
@@ -99,6 +99,9 @@ class MessageQueue(object):
         puts = {}
         bkup_puts = {}
         for obj in objs:
+            if isinstance(obj, unicode):
+                obj = obj.encode('utf-8')
+            
             it = self.hash_ring.iterate_nodes(obj)
             
             # put obj into an mq node.

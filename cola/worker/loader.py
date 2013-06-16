@@ -194,10 +194,10 @@ class BasicWorkerJobLoader(JobLoader):
                 url = urls.pop(0)
                 self.info_logger.info('get %s url: %s' % (bundle.label, url))
                 
-                parser_cls = self.job.url_patterns.get_parser(url)
+                parser_cls, options = self.job.url_patterns.get_parser(url, options=True)
                 if parser_cls is not None:
                     self._require_budget()
-                    next_urls, bundles = parser_cls(opener, url, bundle=bundle).parse()
+                    next_urls, bundles = parser_cls(opener, url, bundle=bundle, **options).parse()
                     next_urls = list(self.job.url_patterns.matches(next_urls))
                     next_urls.extend(urls)
                     urls = next_urls
@@ -218,9 +218,9 @@ class BasicWorkerJobLoader(JobLoader):
     def _execute_url(self, obj, opener=None):
         self._require_budget()
         try:
-            parser_cls = self.job.url_patterns.get_parser(obj)
+            parser_cls, options = self.job.url_patterns.get_parser(obj, options=True)
             if parser_cls is not None:
-                next_urls = parser_cls(opener, obj).parse()
+                next_urls = parser_cls(opener, obj, **options).parse()
                 next_urls = list(self.job.url_patterns.matches(next_urls))
                 self.mq.put(next_urls)
                 
@@ -269,14 +269,14 @@ class BasicWorkerJobLoader(JobLoader):
             
             stopped = False
             while not self.stopped and not stopped:
-                if not self.apply():
-                    return True
-                
                 obj = self.mq.get()
-                print 'start to get %s' % obj
+                self.info_logger.info('start to get %s' % obj)
                 if obj is None:
                     time.sleep(TIME_SLEEP)
                     continue
+                
+                if not self.apply():
+                    return True
                 
                 self.executings.append(obj)
                 stopped = self.execute(obj, opener=opener)

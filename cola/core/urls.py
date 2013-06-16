@@ -23,10 +23,11 @@ Created on 2013-5-21
 import re
 
 class Url(object):
-    def __init__(self, url_re, name, parser):
+    def __init__(self, url_re, name, parser, **kw):
         self.url_re = re.compile(url_re, re.IGNORECASE)
         self.name = name
         self.parser = parser
+        self.options = kw
         
     def match(self, url):
         return self.url_re.match(url) is not None
@@ -54,10 +55,13 @@ class UrlPatterns(object):
                     yield url
                     break
                 
-    def get_parser(self, url, pattern_names=None):
+    def get_parser(self, url, pattern_names=None, options=False):
         for pattern in self.url_patterns:
             if pattern.match(url):
                 if pattern_names is not None and \
                     pattern.name not in pattern_names:
                     continue
+                
+                if options is True:
+                    return pattern.parser, pattern.options
                 return pattern.parser

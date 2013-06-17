@@ -40,14 +40,11 @@ class Node(object):
         
         self.dir_ = dir_
         self.lock_file = os.path.join(dir_, 'lock')
-        self.lock.acquire()
-        try:
+        with self.lock:
             if os.path.exists(self.lock_file):
                 raise NodeExistsError('Directory is being used by another node.')
             else:
                 open(self.lock_file, 'w').close()
-        finally:
-            self.lock.release()
             
         self.old_files = []
         self.map_files = []
@@ -79,11 +76,8 @@ class Node(object):
                 self.verify_exists_hook.sync()
                 self.verify_exists_hook.close()
         finally:
-            self.lock.acquire()
-            try:
+            with self.lock:
                 os.remove(self.lock_file)
-            finally:
-                self.lock.release()
         
     def check(self):
         files = os.listdir(self.dir_)
@@ -164,8 +158,9 @@ class Node(object):
                 if new_size >= self.NODE_FILE_SIZE:
                     continue
                 
-                m[:new_size] = m[:size+1] + obj
-                m.flush()
+                with self.lock:
+                    m[:new_size] = m[:size+1] + obj
+                    m.flush()
                 
             return src_obj
         
@@ -185,8 +180,9 @@ class Node(object):
             pos = m.find('\n')
             while pos >= 0:
                 obj = m[:pos]
-                m[:] = m[pos+1:] + '\x00' * (pos+1)
-                m.flush()
+                with self.lock:
+                    m[:] = m[pos+1:] + '\x00' * (pos+1)
+                    m.flush()
                 if len(obj.strip()) != 0:
                     return obj.strip()
                 pos = m.find('\n')

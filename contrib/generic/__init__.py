@@ -43,6 +43,11 @@ try:
 except ImportError:
     raise DependencyNotInstalledError('mongoengine')
 
+try:
+    from chardet import detect
+except ImportError:
+    raise DependencyNotInstalledError('chardet')
+
 get_user_conf = lambda s: os.path.join(os.path.dirname(os.path.abspath(__file__)), s)
 user_conf = get_user_conf('test.yaml')
 if not os.path.exists(user_conf):
@@ -79,6 +84,8 @@ class GenericParser(Parser):
     def _bool(self, value):
         if isinstance(value, bool):
             return value
+        if value is None:
+            return False
         
         value = value.lower()
         if value == 'y':
@@ -88,6 +95,12 @@ class GenericParser(Parser):
     def parse(self, url=None):
         url = url or self.url
         html = self.opener.open(url)
+        
+        detecting = detect(html)
+        if detecting['confidence'] > 0.5:
+            encoding = detecting['encoding']
+            if encoding not in ('ascii', 'utf-8'):
+                html = html.decode(encoding).encode('utf-8')
         
         base_url = host_for_url(url)
         if base_url is not None:

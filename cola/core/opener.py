@@ -22,12 +22,20 @@ Created on 2013-5-17
 
 import urllib2
 import cookielib
+import gzip
 
 from cola.core.errors import DependencyNotInstalledError
 
 class Opener(object):
     def open(self, url):
         raise NotImplementedError
+    
+    def ungzip(self, fileobj):
+        gz = gzip.GzipFile(fileobj=fileobj, mode='rb')
+        try:
+            return gz.read()
+        finally:
+            gz.close()
 
 class BuiltinOpener(Opener):
     def __init__(self, cookie_filename=None):
@@ -39,7 +47,12 @@ class BuiltinOpener(Opener):
         urllib2.install_opener(self.opener)
     
     def open(self, url):
-        return urllib2.urlopen(url).read()
+        resp = urllib2.urlopen(url)
+        is_gzip = resp.headers.dict.get('content-encoding') == 'gzip'
+        if is_gzip:
+            return self.ungzip(resp)
+        return resp.read()
+        
     
 class MechanizeOpener(Opener):
     def __init__(self, cookie_filename=None, user_agent=None):
@@ -65,7 +78,10 @@ class MechanizeOpener(Opener):
             ('User-agent', user_agent)]
         
     def open(self, url, data=None):
-        return self.browser.open(url, data=data).read()
+        resp = self.browser.open(url, data=data)
+        if resp.info().dict.get('content-encoding') == 'gzip':
+            return self.ungzip(resp)
+        return resp.read()
     
     def browse_open(self, url, data=None):
         self.browser.open(url, data=data)

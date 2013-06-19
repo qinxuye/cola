@@ -142,23 +142,23 @@ class Node(object):
             raise NodeNoSpaceForPut('No enouph space for this put.')
         
         for f in self.map_files:
-            # check if mmap created
-            if f not in self.map_handles:
-                fp = self.file_handles[f]
-                fp.write(obj)
-                fp.flush()
-                
-                m = mmap.mmap(fp.fileno(), self.NODE_FILE_SIZE)
-                self.map_handles[f] = m
-            else:
-                m = self.map_handles[f]
-                size = m.rfind('\n')
-                new_size = size + 1 + len(obj)
-                
-                if new_size >= self.NODE_FILE_SIZE:
-                    continue
-                
-                with self.lock:
+            with self.lock:
+                # check if mmap created
+                if f not in self.map_handles:
+                    fp = self.file_handles[f]
+                    fp.write(obj)
+                    fp.flush()
+                    
+                    m = mmap.mmap(fp.fileno(), self.NODE_FILE_SIZE)
+                    self.map_handles[f] = m
+                else:
+                    m = self.map_handles[f]
+                    size = m.rfind('\n')
+                    new_size = size + 1 + len(obj)
+                    
+                    if new_size >= self.NODE_FILE_SIZE:
+                        continue
+                    
                     m[:new_size] = m[:size+1] + obj
                     m.flush()
                 
@@ -177,15 +177,15 @@ class Node(object):
             
     def get(self):
         for m in self.map_handles.values():
-            pos = m.find('\n')
-            while pos >= 0:
-                obj = m[:pos]
-                with self.lock:
+            with self.lock:
+                pos = m.find('\n')
+                while pos >= 0:
+                    obj = m[:pos]
                     m[:] = m[pos+1:] + '\x00' * (pos+1)
                     m.flush()
-                if len(obj.strip()) != 0:
-                    return obj.strip()
-                pos = m.find('\n')
+                    if len(obj.strip()) != 0:
+                        return obj.strip()
+                    pos = m.find('\n')
         
     def _remove_handles(self, path):
         if path in self.map_handles:

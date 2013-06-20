@@ -23,6 +23,7 @@ Created on 2013-5-23
 import os
 import threading
 import mmap
+import platform
 
 class NodeExistsError(Exception): pass
 
@@ -111,6 +112,16 @@ class Node(object):
             path = os.path.join(self.dir_, '1')
             self.map_files.append(path)
             self.file_handles[path] = open(path, 'w+')
+            
+    def _write_obj(self, fp, obj):
+        if platform.system() == "Windows":
+            fp.write(obj)
+        else:
+            length = len(obj)
+            rest_length = self.NODE_FILE_SIZE - length
+            fp.write(obj + '\x00' * rest_length)
+            
+        fp.flush()
                     
     def put(self, obj, force=False):
         if isinstance(obj, (tuple, list)):
@@ -146,8 +157,7 @@ class Node(object):
                 # check if mmap created
                 if f not in self.map_handles:
                     fp = self.file_handles[f]
-                    fp.write(obj)
-                    fp.flush()
+                    self._write_obj(fp, obj)
                     
                     m = mmap.mmap(fp.fileno(), self.NODE_FILE_SIZE)
                     self.map_handles[f] = m
@@ -169,8 +179,7 @@ class Node(object):
         self.map_files.append(path)
         fp = open(path, 'w+')
         self.file_handles[path] = fp
-        fp.write(obj)
-        fp.flush()
+        self._write_obj(fp, obj)
         self._add_handles(path)
         
         return src_obj

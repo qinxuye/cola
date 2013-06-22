@@ -122,8 +122,8 @@ class Node(object):
             fp.write(obj + '\x00' * rest_length)
             
         fp.flush()
-                    
-    def put(self, obj, force=False):
+        
+    def _get_obj(self, obj, force=False):
         if isinstance(obj, (tuple, list)):
             if self.verify_exists_hook is None or force is True:
                 src_obj = obj
@@ -143,7 +143,14 @@ class Node(object):
                     src_obj = obj
                     obj = obj + '\n'
                 else:
-                    return ''
+                    return '', ''
+        
+        return src_obj, obj
+                    
+    def put(self, obj, force=False):
+        if self.stopped: return ''
+        
+        src_obj, obj = self._get_obj(obj, force=force)
                 
         if len(obj.replace('\n', '')) == 0:
             return ''
@@ -185,6 +192,8 @@ class Node(object):
         return src_obj
             
     def get(self):
+        if self.stopped: return
+        
         for m in self.map_handles.values():
             with self.lock:
                 pos = m.find('\n')

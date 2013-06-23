@@ -26,11 +26,11 @@ import os
 import subprocess
 import shutil
 
-from cola.core.utils import get_ip
 from cola.core.rpc import client_call, ColaRPCServer, \
     FileTransportServer, FileTransportClient
 from cola.core.zip import ZipHandler
-from cola.core.utils import import_job, root_dir
+from cola.core.utils import get_ip, get_ips, \
+                            import_job, root_dir
 from cola.core.config import main_conf
 
 RUNNING, HANGUP, STOPPED = range(3)
@@ -78,7 +78,7 @@ class WatcherInfo(object):
 
 class MasterWatcher(object):
     def __init__(self, root, zip_dir, job_dir, 
-                 data_path=None, force=False):
+                 ip_address=None, data_path=None, force=False):
         self.root = root
         self.zip_dir = zip_dir
         self.job_dir = job_dir
@@ -88,7 +88,13 @@ class MasterWatcher(object):
         self.nodes_watchers = {}
         self.running_jobs = {}
         self.black_list = []
-        self.ip_address = get_ip()
+        if ip_address is None:
+            ip_address = get_ip()
+        else:
+            choices_ips = get_ips()
+            if ip_address not in choices_ips:
+                raise ValueError('IP address must be one of (%s)' % ','.join(choices_ips))
+        self.ip_address = ip_address
         self.port = main_conf.master.port
         
         self.stopped = False
@@ -231,7 +237,8 @@ class MasterWatcher(object):
             f = os.path.join(dirname, 'loader.py')
             workers = ['%s:%s'%(node, worker_port) for node in nodes]
             
-            cmds = ['python', f, '-j', job_dir, '-n', ' '.join(workers)]
+            cmds = ['python', f, '-j', job_dir, '-i', self.ip_address, 
+                    '-n', ' '.join(workers)]
             if self.data_path is not None:
                 cmds.extend(['-d', self.data_path])
             if self.force:
@@ -304,6 +311,9 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--data', metavar='data root directory', nargs='?',
                         default=None, const=None, 
                         help='root directory to put data')
+    parser.add_argument('-i', '--ip', metavar='IP address', nargs='?',
+                        default=None, const=None, 
+                        help='IP Address to start')
     parser.add_argument('-f', '--force', metavar='force start', nargs='?',
                         default=False, const=True, type=bool)
     args = parser.parse_args()
@@ -311,6 +321,7 @@ if __name__ == "__main__":
     data_path = args.data
     if data_path is None:
         data_path = os.path.join(root_dir(), 'data')
+    ip = args.ip
     force = args.force
         
     root = os.path.join(data_path, 'master', 'watcher')
@@ -319,6 +330,7 @@ if __name__ == "__main__":
     for dir_ in (root, zip_dir, job_dir):
         makedirs(dir_)
     
-    with MasterWatcher(root, zip_dir, job_dir, data_path=data_path, force=force) \
+    with MasterWatcher(root, zip_dir, job_dir, ip_address=ip,
+                       data_path=data_path, force=force) \
         as master_watcher:
         master_watcher.run()

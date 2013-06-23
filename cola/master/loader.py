@@ -27,7 +27,7 @@ import os
 
 from cola.core.rpc import client_call
 from cola.core.mq.client import MessageQueueClient
-from cola.core.utils import get_ip, root_dir, import_job
+from cola.core.utils import get_ip, get_ips, root_dir, import_job
 from cola.core.logs import LogRecordSocketReceiver, get_logger, \
                             add_log_client
 from cola.core.config import main_conf
@@ -38,11 +38,17 @@ class JobMasterRunning(Exception): pass
 TIME_SLEEP = 10
 
 class MasterJobLoader(LimitionJobLoader, JobLoader):
-    def __init__(self, job, data_dir, nodes, client=None,
+    def __init__(self, job, data_dir, nodes, local_ip=None, client=None,
                  context=None, copies=1, force=False):
         ctx = context or job.context
         master_port = ctx.job.master_port
-        local = '%s:%s' % (get_ip(), master_port)
+        if local_ip is None:
+            local_ip = get_ip()
+        else:
+            choices_ips = get_ips()
+            if local_ip not in choices_ips:
+                raise ValueError('IP address must be one of (%s)' % ','.join(choices_ips))
+        local = '%s:%s' % (local_ip, master_port)
         
         JobLoader.__init__(self, job, data_dir, local, 
                            context=ctx, copies=copies, force=force)
@@ -201,7 +207,7 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
     def __exit__(self, type_, value, traceback):
         self.finish()
 
-def load_job(job_path, nodes, data_path=None, 
+def load_job(job_path, nodes, ip_address=None, data_path=None, 
              client=None, context=None, force=False):
     if not os.path.exists(job_path):
         raise ValueError('Job definition does not exist.')
@@ -214,7 +220,7 @@ def load_job(job_path, nodes, data_path=None,
     if not os.path.exists(root):
         os.makedirs(root)
     
-    with MasterJobLoader(job, root, nodes, client=client, 
+    with MasterJobLoader(job, root, nodes, local_ip=ip_address, client=client, 
                          context=context, force=force) as job_loader:
         job_loader.run()
     
@@ -227,6 +233,9 @@ if __name__ == '__main__':
     parser.add_argument('-d', '--data', metavar='data root directory', nargs='?',
                         default=None, const=None, 
                         help='root directory to put data')
+    parser.add_argument('-i', '--ip', metavar='IP address', nargs='?',
+                        default=None, const=None, 
+                        help='IP Address to start')
     parser.add_argument('-f', '--force', metavar='force start', nargs='?',
                         default=False, const=True, type=bool)
     parser.add_argument('-n', '--nodes', metavar='worker job loaders', required=True, nargs='+',
@@ -238,8 +247,10 @@ if __name__ == '__main__':
     
     path = args.job
     data_path = args.data
+    ip_address = args.ip
     nodes = args.nodes
     force = args.force
     client = args.client
-    load_job(path, nodes, data_path=data_path, 
+    load_job(path, nodes, ip_address=ip_address, 
+             data_path=data_path, 
              client=client, force=force)

@@ -25,6 +25,13 @@ import os
 import sys
 import urllib
 
+def get_ips():
+    localIP = socket.gethostbyname(socket.gethostname())
+    ex = socket.gethostbyname_ex(socket.gethostname())[2]
+    if len(ex) == 1:
+        return [ex[0]]
+    return [ip for ip in ex if ip != localIP]
+
 def get_ip():
     localIP = socket.gethostbyname(socket.gethostname())
     ex = socket.gethostbyname_ex(socket.gethostname())[2]

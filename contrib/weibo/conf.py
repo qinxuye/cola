@@ -27,7 +27,7 @@ from cola.core.config import Config
 base = os.path.dirname(os.path.abspath(__file__))
 user_conf = os.path.join(base, 'test.yaml')
 if not os.path.exists(user_conf):
-    user_conf = os.path.join(base, 'sina.yaml')
+    user_conf = os.path.join(base, 'weibo.yaml')
 user_config = Config(user_conf)
 
 starts = [str(start.uid) for start in user_config.job.starts]

@@ -42,7 +42,7 @@ def _client_call(*args):
 get_user_conf = lambda s: os.path.join(os.path.dirname(os.path.abspath(__file__)), s)
 user_conf = get_user_conf('test.yaml')
 if not os.path.exists(user_conf):
-    user_conf = get_user_conf('sina.yaml')
+    user_conf = get_user_conf('weibo.yaml')
 user_config = Config(user_conf)
 
 if __name__ == '__main__':

@@ -21,8 +21,7 @@ Created on 2013-5-17
 '''
 import unittest
 
-from cola.core.opener import BuiltinOpener, MechanizeOpener
-
+from cola.core.opener import BuiltinOpener, MechanizeOpener, GhostOpener
 
 class Test(unittest.TestCase):
 
@@ -30,16 +29,28 @@ class Test(unittest.TestCase):
     def testBuiltinOpener(self):
         opener = BuiltinOpener()
         assert 'baidu' in opener.open('http://www.baidu.com')
-        
+         
     def testMechanizeOpener(self):
         test_url = 'http://www.baidu.com'
         opener = MechanizeOpener()
-        
+         
         assert 'baidu' in opener.open(test_url)
-        
+         
         br = opener.browse_open(test_url)
         assert u'百度' in br.title()
         assert 'baidu' in br.response().read()
+        
+    def testGhostOpener(self):
+        from cola.core.extractor.preprocess import PreProcessor
+        
+        opener = GhostOpener()
+        
+        ghost = opener.ghost_open(
+            'http://s.weibo.com/weibo/%25E8%25B6%2585%25E7%25BA%25A7%25E6%259C%2588%25E4%25BA%25AE?topnav=1&wvr=5&Refer=top_hot')
+        ghost.wait_for_selector('div#pl_weibo_feedlist')
+        html = ghost.content
+        _, content = PreProcessor(html).process()
+        self.assertIn(u'超级月亮', unicode(content))
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

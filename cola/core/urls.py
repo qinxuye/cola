@@ -47,17 +47,21 @@ class UrlPatterns(object):
     
     def matches(self, urls, pattern_names=None):
         for url in urls:
+            if isinstance(url, basestring):
+                url_str = url
+            else:
+                url_str = str(url)
             for pattern in self.url_patterns:
                 if pattern_names is not None and \
                     pattern.name not in pattern_names:
                     continue
-                if pattern.match(url):
+                if pattern.match(url_str):
                     yield url
                     break
                 
     def get_parser(self, url, pattern_names=None, options=False):
         for pattern in self.url_patterns:
-            if pattern.match(url):
+            if pattern.match(str(url)):
                 if pattern_names is not None and \
                     pattern.name not in pattern_names:
                     continue

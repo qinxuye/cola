@@ -20,6 +20,14 @@ Created on 2013-5-23
 @author: Chine
 '''
 
+class Url(object):
+    def __init__(self, url, force=False):
+        self.url = url
+        self.force = force
+        
+    def __str__(self):
+        return self.url
+
 class Bundle(object):
     '''
     Sometimes the target is all the urls about a user.
@@ -27,11 +35,11 @@ class Bundle(object):
     So a bundle can generate several urls.
     '''
     
-    def __init__(self, label):
+    def __init__(self, label, force=False):
         if not isinstance(label, str):
             raise ValueError("Bundle's label must a string.")
         self.label = label
-        self.force = False
+        self.force = force
         
     def urls(self):
         raise NotImplementedError

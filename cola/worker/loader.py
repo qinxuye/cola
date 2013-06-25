@@ -223,7 +223,16 @@ class BasicWorkerJobLoader(JobLoader):
             if parser_cls is not None:
                 next_urls = parser_cls(opener, obj, **options).parse()
                 next_urls = list(self.job.url_patterns.matches(next_urls))
-                self.mq.put(next_urls)
+                
+                puts = []
+                forces = []
+                for url in next_urls:
+                    if isinstance(url, basestring) or url.force is False:
+                        puts.append(url)
+                    else:
+                        forces.append(url)
+                self.mq.put(puts)
+                self.mq.put(forces, force=True)
                 
             self.error_times = 0
         except LoginFailure, e:

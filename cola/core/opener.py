@@ -87,26 +87,3 @@ class MechanizeOpener(Opener):
     def browse_open(self, url, data=None):
         self.browser.open(url, data=data)
         return self.browser
-    
-class GhostOpener(Opener):
-    def __init__(self):
-        try:
-            from ghost import Ghost
-        except ImportError:
-            raise DependencyNotInstalledError('Ghost.py')
-        
-        self.ghost = Ghost()
-        for method in ('fill', 'evaluate', 'fire_on', 'click', 
-                       'global_exists', 'set_field_value'):
-            setattr(self, method, getattr(self.ghost, method))
-            
-    def ghost_open(self, url, method='get', headers={}, data=None):
-        body = None
-        if data is not None:
-            body = urllib.urlencode(data)
-        self.ghost.open(url, method=method, headers=headers, body=body)
-        return self.ghost
-        
-    def open(self, url, method='get', headers={}, data=None):
-        ghost = self.ghost_open(url, method=method, headers=headers, data=data)
-        return ghost.content

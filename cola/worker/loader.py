@@ -202,7 +202,8 @@ class BasicWorkerJobLoader(JobLoader):
                     next_urls.extend(urls)
                     urls = next_urls
                     if bundles:
-                        self.mq.put([str(b) for b in bundles])
+                        self.mq.put([str(b) for b in bundles if b.force is False])
+                        self.mq.put([str(b) for b in bundles if b.force is True], force=True)
                         
             self.error_times = 0
         except LoginFailure, e:
@@ -262,8 +263,9 @@ class BasicWorkerJobLoader(JobLoader):
             self.mq.add_node(node)
             
     def _run(self):
-        def _call():
-            opener = self.job.opener_cls()
+        def _call(opener=None):
+            if opener is None:
+                opener = self.job.opener_cls()
             if not self._login(opener):
                 return
             

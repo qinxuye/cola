@@ -31,6 +31,7 @@ class Bundle(object):
         if not isinstance(label, str):
             raise ValueError("Bundle's label must a string.")
         self.label = label
+        self.force = False
         
     def urls(self):
         raise NotImplementedError

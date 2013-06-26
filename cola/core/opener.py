@@ -20,7 +20,6 @@ Created on 2013-5-17
 @author: Chine
 '''
 
-import urllib
 import urllib2
 import cookielib
 import gzip
@@ -87,3 +86,50 @@ class MechanizeOpener(Opener):
     def browse_open(self, url, data=None):
         self.browser.open(url, data=data)
         return self.browser
+    
+class SpynnerOpener(Opener):
+    def __init__(self, user_agent=None, **kwargs):
+        try:
+            import spynner
+        except ImportError:
+            raise DependencyNotInstalledError('spynner')
+        
+        if user_agent is None:
+            user_agent = 'Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)'
+        
+        self.br = spynner.Browser(user_agent=user_agent, **kwargs)
+        
+    def spynner_open(self, url, data=None, headers=None, method='GET', 
+                     wait_for_text=None, wait_for_selector=None, tries=None):
+        try:
+            from PyQt4.QtNetwork import QNetworkAccessManager
+        except ImportError:
+            raise DependencyNotInstalledError('PyQt4')
+        
+        if wait_for_text is not None:
+            def wait_callback(br):
+                return wait_for_text in br.html
+        elif wait_for_selector is not None:
+            def wait_callback(br):
+                return not br.webframe.findFirstElement(wait_for_selector).isNull()
+        else:
+            wait_callback = None
+        
+        operation = QNetworkAccessManager.GetOperation
+        if method == 'POST':
+            operation = QNetworkAccessManager.PostOperation
+        self.br.load(url, wait_callback=wait_callback, tries=tries, 
+                     operation=operation, body=data, headers=headers)
+        
+        return self.br
+        
+    def open(self, url, data=None, headers=None, method='GET', 
+             wait_for_text=None, wait_for_selector=None, tries=None):
+        br = self.spynner_open(url, data=data, headers=headers, method=method, 
+                               wait_for_text=wait_for_text, tries=tries)
+        return br.contents
+    
+    def wait_for_selector(self, selector, **kwargs):
+        self.br.wait_for_content(
+            lambda br: not br.webframe.findFirstElement(selector).isNull(), 
+            **kwargs)

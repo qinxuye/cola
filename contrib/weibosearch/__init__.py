@@ -31,7 +31,7 @@ from parsers import WeiboSearchParser
 from conf import user_config, instances
 from bundle import WeiboSearchBundle
 
-debug = True
+debug = False
 
 def login_hook(opener, **kw):
     username = kw['username']
@@ -57,5 +57,7 @@ def get_job():
                login_hook=login_hook)
     
 if __name__ == "__main__":
+    debug = True
+    
     from cola.worker.loader import load_job
     load_job(os.path.dirname(os.path.abspath(__file__)))

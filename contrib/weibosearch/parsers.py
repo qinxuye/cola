@@ -39,6 +39,11 @@ try:
 except ImportError:
     raise DependencyNotInstalledError('python-dateutil')
 
+try:
+    from spynner import SpynnerTimeout
+except ImportError:
+    raise DependencyNotInstalledError('spynner')
+
 class WeiboSearchParser(Parser):
     def __init__(self, opener=None, url=None, bundle=None, **kwargs):
         super(WeiboSearchParser, self).__init__(opener=opener, url=url, **kwargs)
@@ -58,7 +63,13 @@ class WeiboSearchParser(Parser):
         url = url or self.url
         
         br = self.opener.spynner_open(url)
-        self.opener.wait_for_selector('div.feed_lists')
+        self.opener.wait_for_selector('div#pl_weibo_feedlist')
+        try:
+            self.opener.wait_for_selector('div.feed_lists', tries=5)
+        except SpynnerTimeout:
+            bundle = WeiboSearchBundle(self.keyword, force=True)
+            return [], [bundle]
+            
         html = br.html
         soup = BeautifulSoup(html)
         
@@ -98,7 +109,7 @@ class WeiboSearchParser(Parser):
             weibo.save()
             
         pages = soup.find('div', attrs={'class': 'search_page'})
-        if len(list(pages.children)) == 0:
+        if pages is None or len(list(pages.find_all('a'))) == 0:
             finished = True
         else:
             next_page = pages.find_all('a')[-1]

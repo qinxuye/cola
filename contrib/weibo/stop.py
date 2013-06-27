@@ -20,14 +20,13 @@ Created on 2013-6-22
 @author: Chine
 '''
 
-
-import os
 import socket
 
 from cola.core.rpc import client_call
 from cola.core.utils import get_ip
-from cola.core.config import Config
 from cola.core.logs import get_logger
+
+from conf import user_config
 
 logger = get_logger(name='sina_stop')
 
@@ -38,12 +37,6 @@ def _client_call(*args):
         logger.error('Cannot connect to single running worker.')
     except:
         pass
-
-get_user_conf = lambda s: os.path.join(os.path.dirname(os.path.abspath(__file__)), s)
-user_conf = get_user_conf('test.yaml')
-if not os.path.exists(user_conf):
-    user_conf = get_user_conf('weibo.yaml')
-user_config = Config(user_conf)
 
 if __name__ == '__main__':
     ip, port = get_ip(), getattr(user_config.job, 'port')

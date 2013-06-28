@@ -71,6 +71,7 @@ class MechanizeOpener(Opener):
             self.cj.load(cookie_filename)
         self.browser.set_cookiejar(self.cj)
         self.browser.set_handle_equiv(True)
+        self.browser.set_handle_gzip(True)
         self.browser.set_handle_redirect(True)
         self.browser.set_handle_referer(True)
         self.browser.set_handle_robots(False)
@@ -78,10 +79,10 @@ class MechanizeOpener(Opener):
             ('User-agent', user_agent)]
         
     def open(self, url, data=None):
-        resp = self.browser.open(url, data=data)
-        if resp.info().dict.get('content-encoding') == 'gzip':
-            return self.ungzip(resp)
-        return resp.read()
+        # check if gzip by
+        # br.response().info().dict.get('content-encoding') == 'gzip'
+        # experimently add `self.br.set_handle_gzip(True)` to handle
+        return self.browser.open(url, data=data).read()
     
     def browse_open(self, url, data=None):
         self.browser.open(url, data=data)

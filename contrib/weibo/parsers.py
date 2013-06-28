@@ -23,7 +23,6 @@ Created on 2013-6-8
 import time
 import json
 import urllib
-import urlparse
 
 from cola.core.parsers import Parser
 from cola.core.utils import urldecode
@@ -301,6 +300,8 @@ class UserFriendParser(WeiboParser):
         
         bundles = []
         ul = html.find(attrs={'class': 'cnfList', 'node-type': 'userListBox'})
+        if ul is None:
+            return [], bundles
         for li in ul.find_all(attrs={'class': 'S_line1', 'action-type': 'itemClick'}):
             data = dict([l.split('=') for l in li['action-data'].split('&')])
             
@@ -324,9 +325,9 @@ class UserFriendParser(WeiboParser):
             if len(a) > 0:
                 next_ = a[-1]
                 if next_['class'] == ['W_btn_c']:
-                    url = next_['href']
-                    if not url.startswith('http://'):
-                        url = urlparse.urljoin('http://weibo.com', url)
+                    url = '%s?page=%s' % (
+                        url.split('?')[0], 
+                        (int(urldecode(url).get('page', 1))+1))
                     urls.append(url)
                     
         return urls, bundles

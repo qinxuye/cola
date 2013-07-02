@@ -81,7 +81,7 @@ class MicroBlogParser(WeiboParser):
         br = self.opener.browse_open(url)
         
         if not self.check(url, br):
-            return
+            return [], []
             
         weibo_user = self.get_weibo_user()
         
@@ -178,7 +178,7 @@ class UserInfoParser(WeiboParser):
         soup = BeautifulSoup(br.response().read())
         
         if not self.check(url, br):
-            return
+            return [], []
         
         weibo_user = self.get_weibo_user()
         info = weibo_user.info
@@ -221,6 +221,8 @@ class UserInfoParser(WeiboParser):
             k = div.find(attrs={'class': 'label'}).text.strip()
             v = div.find(attrs={'class': 'con'}).text.strip()
             if k in profile_map:
+                if k == u'个性域名' and '|' in v:
+                    v = v.split('|')[1].strip()
                 func = (lambda s: s) \
                         if 'func' not in profile_map[k] \
                         else profile_map[k]['func']
@@ -281,7 +283,7 @@ class UserFriendParser(WeiboParser):
         soup = BeautifulSoup(br.response().read())
         
         if not self.check(url, br):
-            return
+            return [], []
         
         weibo_user = self.get_weibo_user()
         

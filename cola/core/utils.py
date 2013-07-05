@@ -25,6 +25,16 @@ import os
 import sys
 import urllib
 
+def add_localhost(func):
+    def inner(*args, **kwargs):
+        ips = func(*args, **kwargs)
+        localhost = '127.0.0.1'
+        if localhost not in ips:
+            ips.append(localhost)
+        return ips
+    return inner
+
+@add_localhost
 def get_ips():
     localIP = socket.gethostbyname(socket.gethostname())
     ex = socket.gethostbyname_ex(socket.gethostname())[2]

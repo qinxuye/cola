@@ -23,6 +23,17 @@ Created on 2013-6-6
 import os
 import zipfile
 
+class FixedZipFile(zipfile.ZipFile):
+    '''
+    Fixed for Python 2.6 when ZipFile doesn't support with statement
+    '''
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, type_, value, traceback):
+        self.close()
+
 class ZipHandler(object):
     
     @classmethod
@@ -30,7 +41,7 @@ class ZipHandler(object):
         root_len = len(os.path.abspath(src_dir))
         dir_name = os.path.split(src_dir)[1].replace(' ', '_')
         
-        with zipfile.ZipFile(zip_file, 'w') as zf:
+        with FixedZipFile(zip_file, 'w') as zf:
             if os.path.isfile(src_dir):
                 zf.write(src_dir, dir_name)
             else:
@@ -50,7 +61,7 @@ class ZipHandler(object):
     @classmethod
     def uncompress(cls, zip_file, dest_dir):
         dir_name = None
-        with zipfile.ZipFile(zip_file) as zf:
+        with FixedZipFile(zip_file) as zf:
             for f in zf.namelist():
                 zf.extract(f, dest_dir)
                 if dir_name is None:

@@ -23,13 +23,13 @@ Created on 2013-6-6
 import subprocess
 import os
 
-from cola.core.utils import root_dir, get_ip
+from cola.core.utils import root_dir
 from cola.core.config import main_conf
 
 def start_master(ip=None, data_path=None, force=False):
     path = os.path.join(root_dir(), 'cola', 'master', 'watcher.py')
     
-    print 'Start master at %s:%s' % (get_ip(), main_conf.master.port)
+    print 'Start master at %s:%s' % (ip, main_conf.master.port)
     print 'Master will run in background. Please do not shut down the terminal.'
     
     cmds = ['python', path]

@@ -139,6 +139,9 @@ class LimitionJobLoader(object):
         return True
             
     def apply(self):
+        if not self.size_limit and not self.stopped:
+            return True
+        
         if self.completed >= self.size or \
             self.stopped:
             return False

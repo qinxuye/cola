@@ -210,7 +210,7 @@ class ForwardCommentParser(WeiboParser):
             this_year = datetime.now().year
             dt = self._strptime('%s %s' % (this_year, dt_str), '%Y %m月%d日 %H:%M')
         else:
-            dt = self._strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+            dt = parse(dt_str)
         return dt
     
     def parse(self, url=None):

@@ -26,7 +26,7 @@ from conf import mongo_host, mongo_port, db_name
 
 try:
     from mongoengine import connect, Document, EmbeddedDocument, \
-                            DoesNotExist, \
+                            DoesNotExist, Q, \
                             StringField, DateTimeField, EmailField, \
                             BooleanField, URLField, IntField, \
                             ListField, EmbeddedDocumentField
@@ -36,6 +36,20 @@ except ImportError:
 connect(db_name, host=mongo_host, port=mongo_port)
 
 DoesNotExist = DoesNotExist
+Q = Q
+
+class Forward(EmbeddedDocument):
+    mid = StringField(required=True)
+    uid = StringField(required=True)
+    avatar = URLField()
+    content = StringField()
+    created = DateTimeField()
+
+class Comment(EmbeddedDocument):
+    uid = StringField(required=True)
+    avatar = URLField()
+    content = StringField()
+    created = DateTimeField()
 
 class MicroBlog(EmbeddedDocument):
     mid = StringField(required=True)
@@ -43,9 +57,11 @@ class MicroBlog(EmbeddedDocument):
     forward = StringField()
     created = DateTimeField()
     
-    likes = IntField()
-    forwards = IntField()
-    comments = IntField()
+    n_likes = IntField()
+    n_forwards = IntField()
+    forwards = ListField(EmbeddedDocumentField(Forward)) 
+    n_comments = IntField()
+    comments = ListField(EmbeddedDocumentField(Comment))
     
 class EduInfo(EmbeddedDocument):
     name = StringField()
@@ -61,6 +77,7 @@ class WorkInfo(EmbeddedDocument):
     
 class UserInfo(EmbeddedDocument):
     nickname = StringField()
+    avatar = URLField()
     location = StringField()
     sex = BooleanField()
     birth = StringField()

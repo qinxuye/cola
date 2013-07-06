@@ -15,3 +15,6 @@ job:
   starts:
     - uid: 3211200050
     - uid: 1898353550
+  fetch:
+    forward: no
+    comment: no

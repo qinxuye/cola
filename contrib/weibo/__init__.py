@@ -27,7 +27,8 @@ from cola.core.urls import Url, UrlPatterns
 from cola.job import Job
 
 from login import WeiboLogin
-from parsers import MicroBlogParser, UserInfoParser, UserFriendParser
+from parsers import MicroBlogParser, ForwardCommentParser,\
+                    UserInfoParser, UserFriendParser
 from conf import starts, user_config, instances
 from bundle import WeiboUserBundle
 
@@ -40,6 +41,7 @@ def login_hook(opener, **kw):
 
 url_patterns = UrlPatterns(
     Url(r'http://weibo.com/aj/mblog/mbloglist.*', 'micro_blog', MicroBlogParser),
+    Url(r'http://weibo.com/aj/.+/big.*', 'forward_comment', ForwardCommentParser),
     Url(r'http://weibo.com/\d+/info', 'user_info', UserInfoParser),
     Url(r'http://weibo.com/\d+/follow.*', 'follows', UserFriendParser),
     Url(r'http://weibo.com/\d+/fans.*', 'fans', UserFriendParser)

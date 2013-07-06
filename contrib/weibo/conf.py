@@ -37,3 +37,6 @@ mongo_port = user_config.job.mongo.port
 db_name = user_config.job.db
 
 instances = user_config.job.instances
+
+fetch_forward = user_config.job.fetch.forward
+fetch_comment = user_config.job.fetch.comment

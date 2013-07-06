@@ -9,7 +9,8 @@ import time
 from cola.core.opener import MechanizeOpener
 
 from contrib.weibo import login_hook
-from contrib.weibo.parsers import MicroBlogParser, UserInfoParser, UserFriendParser
+from contrib.weibo.parsers import MicroBlogParser, ForwardCommentParser, \
+                                    UserInfoParser, UserFriendParser
 from contrib.weibo.conf import user_config
 from contrib.weibo.bundle import WeiboUserBundle
 
@@ -44,13 +45,13 @@ class Test(unittest.TestCase):
                                  url=test_url, 
                                  bundle=self.bundle)
         urls, bundles = parser.parse()
-          
-        self.assertEqual(len(urls), 1)
-        self.assertEqual(len(bundles), 0)
            
+        self.assertNotEqual(len(urls), 1)
+        self.assertEqual(len(bundles), 0)
+            
         user = self.collection.find_one({'uid': self.test_uid})
         self.assertEqual(len(user['statuses']), 15)
-          
+           
         parser = MicroBlogParser(opener=self.opener,
                                  url=urls[0],
                                  bundle=self.bundle)
@@ -58,6 +59,24 @@ class Test(unittest.TestCase):
         user = self.collection.find_one({'uid': self.test_uid})
         self.assertEqual(len(user['statuses']), 30)
         self.assertNotEqual(user['statuses'][0], user['statuses'][15])
+        
+    def testMicroBlogForwardsParser(self):
+        test_url = 'http://weibo.com/aj/mblog/info/big?id=3596988739933218&_t=0&__rnd=1373094212593'
+        parser = ForwardCommentParser(opener=self.opener,
+                                      url=test_url,
+                                      bundle=self.bundle)
+        urls, _ = parser.parse()
+        
+        self.assertEqual(len(urls), 1)
+        
+        user = self.collection.find_one({'uid': self.test_uid})
+        self.assertEqual(len(user['statuses'][0]['forwards']), 20)
+        
+        parser.parse(urls[0])
+        user = self.collection.find_one({'uid': self.test_uid})
+        self.assertEqual(len(user['statuses'][0]['forwards']), 40)
+        self.assertNotEqual(user['statuses'][0]['forwards'][0], 
+                            user['statuses'][0]['forwards'][20])
   
     def testUserInfoParser(self):
         test_url = 'http://weibo.com/%s/info' % self.test_uid
@@ -65,10 +84,10 @@ class Test(unittest.TestCase):
                                 url=test_url,
                                 bundle=self.bundle)
         parser.parse()
-           
+            
         user = self.collection.find_one({'uid': self.test_uid})
         self.assertTrue('info' in user)
-        
+         
     def testUserInfoParserForSite(self):
         test_uid = '2733272463'
         test_url = 'http://weibo.com/%s/info' % test_uid
@@ -77,7 +96,7 @@ class Test(unittest.TestCase):
                                 url=test_url,
                                 bundle=bundle)
         parser.parse()
-        
+         
     def testFriendParser(self):
         test_url = 'http://weibo.com/%s/follow' % self.test_uid
         parser = UserFriendParser(opener=self.opener,
@@ -86,7 +105,7 @@ class Test(unittest.TestCase):
         urls, bundles = parser.parse()
         self.assertEqual(len(urls), 1)
         self.assertGreater(bundles, 0)
-         
+          
         user = self.collection.find_one({'uid': self.test_uid})
         self.assertEqual(len(bundles), len(user['follows']))
 

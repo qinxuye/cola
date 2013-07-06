@@ -23,6 +23,8 @@ Created on 2013-6-8
 import time
 import json
 import urllib
+from datetime import datetime, timedelta
+from threading import Lock
 
 from cola.core.parsers import Parser
 from cola.core.utils import urldecode
@@ -31,7 +33,9 @@ from cola.core.errors import DependencyNotInstalledError
 from login import WeiboLoginFailure
 from bundle import WeiboUserBundle
 from storage import DoesNotExist, WeiboUser, Friend,\
-                    MicroBlog, UserInfo, WorkInfo, EduInfo
+                    MicroBlog, UserInfo, WorkInfo, EduInfo,\
+                    Comment, Forward
+from conf import fetch_forward, fetch_comment
 
 try:
     from bs4 import BeautifulSoup
@@ -74,7 +78,7 @@ class WeiboParser(Parser):
 class MicroBlogParser(WeiboParser):
     def parse(self, url=None):
         if self.bundle.exists == False:
-            return
+            return [], []
         
         url = url or self.url
         params = urldecode(url)
@@ -107,6 +111,7 @@ class MicroBlogParser(WeiboParser):
         
         divs = soup.find_all('div', attrs={'class': 'WB_feed_type'},  mid=True)
         max_id = None
+        next_urls = []
         for div in divs:
             mid = div['mid']
             if len(mid) == 0:
@@ -143,17 +148,28 @@ class MicroBlogParser(WeiboParser):
             likes = div.find('a', attrs={'action-type': 'feed_list_like'}).text
             likes = likes.strip('(').strip(')')
             likes = 0 if len(likes) == 0 else int(likes)
-            mblog.likes = likes
+            mblog.n_likes = likes
             forwards = div.find('a', attrs={'action-type': 'feed_list_forward'}).text
             if '(' not in forwards:
-                mblog.forwards = 0
+                mblog.n_forwards = 0
             else:
-                mblog.forwards = int(forwards.strip().split('(', 1)[1].strip(')'))
+                mblog.n_forwards = int(forwards.strip().split('(', 1)[1].strip(')'))
             comments = div.find('a', attrs={'action-type': 'feed_list_comment'}).text
             if '(' not in comments:
-                mblog.comments = 0
+                mblog.n_comments = 0
             else:
-                mblog.comments = int(comments.strip().split('(', 1)[1].strip(')'))
+                mblog.n_comments = int(comments.strip().split('(', 1)[1].strip(')'))
+            
+            # fetch forwards and comments
+            if fetch_forward or fetch_comment:
+                query = {'id': mid, '_t': 0, '__rnd': int(time.time()*1000)}
+                query_str = urllib.urlencode(query)
+                if fetch_forward and mblog.n_forwards > 0:
+                    forward_url = 'http://weibo.com/aj/comment/big?%s' % query_str
+                    next_urls.append(forward_url)
+                if fetch_comment and mblog.n_comments > 0:
+                    comment_url = 'http://weibo.com/aj/mblog/info/big?%s' % query_str
+                    next_urls.append(comment_url)
             
             weibo_user.statuses.append(mblog)
                 
@@ -166,12 +182,106 @@ class MicroBlogParser(WeiboParser):
             return [], []
         
         weibo_user.save()
-        return ['%s?%s'%(url.split('?')[0], urllib.urlencode(params)), ], []
+        next_urls.append('%s?%s'%(url.split('?')[0], urllib.urlencode(params)))
+        return next_urls, []
+    
+class ForwardCommentParser(WeiboParser):
+    strptime_lock = Lock()
+    
+    def _strptime(self, string, format_):
+        self.strptime_lock.acquire()
+        try:
+            return datetime.strptime(string, format_)
+        finally:
+            self.strptime_lock.release()
+        
+    def parse_datetime(self, dt_str):
+        dt = None
+        if u'秒' in dt_str:
+            sec = int(dt_str.split(u'秒', 1)[0].strip())
+            dt = datetime.now() - timedelta(seconds=sec)
+        elif u'分钟' in dt_str:
+            sec = int(dt_str.split(u'分钟', 1)[0].strip()) * 60
+            dt = datetime.now() - timedelta(seconds=sec)
+        elif u'今天' in dt_str:
+            dt_str = dt_str.replace(u'今天', datetime.now().strftime('%Y-%m-%d'))
+            dt = self._strptime(dt_str, '%Y-%m-%d %H:%M')
+        elif u'月' in dt_str and u'日' in dt_str:
+            this_year = datetime.now().year
+            dt = self._strptime('%s %s' % (this_year, dt_str), '%Y %m月%d日 %H:%M')
+        else:
+            dt = self._strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+        return dt
+    
+    def parse(self, url=None):
+        if self.bundle.exists == False:
+            return [], []
+        
+        url = url or self.url
+        br = self.opener.browse_open(url)
+        jsn = json.loads(br.response().read())
+        soup = BeautifulSoup(jsn['data']['html'])
+        current_page = jsn['data']['page']['pagenum']
+        n_pages = jsn['data']['page']['totalpage']
+        
+        if not self.check(url, br):
+            return [], []
+        
+        weibo_user = self.get_weibo_user()
+        mid = urldecode(url)['id']
+        
+        mblogs = weibo_user.statuses
+        mblog = None
+        for m in mblogs:
+            if m.mid == mid:
+                mblog = m
+                break
+        if mblog is None:
+            mblog = MicroBlog(mid=mid)
+            weibo_user.statuses.append(mblog)
+        
+        def set_instance(instance, dl):
+            instance.avatar = dl.find('dt').find('img')['src']
+            date = dl.find('dd').find('span', attrs={'class': 'S_txt2'}).text
+            date = date.strip().strip('(').strip(')')
+            instance.created = self.parse_datetime(date)
+            for div in dl.find_all('div'): div.extract()
+            for span in dl.find_all('span'): span.extract()
+            instance.content = dl.text.strip()
+        
+        if url.startswith('http://weibo.com/aj/comment'):
+            dls = soup.find_all('dl', mid=True)
+            for dl in dls:
+                comment = Comment(uid=self.uid)
+                set_instance(comment, dl)
+                
+                mblog.comments.append(comment)
+        elif url.startswith('http://weibo.com/aj/mblog/info'):
+            dls = soup.find_all('dl', mid=True)
+            for dl in dls:
+                forward = Forward(uid=self.uid, mid=dl['mid'])
+                set_instance(forward, dl)
+                
+                mblog.forwards.append(forward)
+        
+        weibo_user.save()
+        
+        if current_page >= n_pages:
+            return [], []
+        
+        params = urldecode(url)
+        next_page_str = soup.find('a', attrs={'class': 'btn_page_next'})\
+                            .find('span')['action-data']
+        new_params = urldecode('?%s'%next_page_str)
+        params.update(new_params)
+        params['__rnd'] = int(time.time()*1000)
+        next_page = '%s?%s' % (url.split('?')[0] , urllib.urlencode(params))
+        return [next_page, ], []
     
 class UserInfoParser(WeiboParser):
     def parse(self, url=None):
         if self.bundle.exists == False:
-            return
+            return [], []
         
         url = url or self.url
         br = self.opener.browse_open(url)
@@ -203,6 +313,9 @@ class UserInfoParser(WeiboParser):
                     edu_div = BeautifulSoup(data['html'])
                 elif pid == 'pl_profile_infoTag':
                     tags_div = BeautifulSoup(data['html'])
+                elif pid == 'pl_profile_photo':
+                    soup = BeautifulSoup(data['html'])
+                    weibo_user.info.avatar = soup.find('img')['src']
         
         profile_map = {
             u'昵称': {'field': 'nickname'},
@@ -276,7 +389,7 @@ class UserInfoParser(WeiboParser):
 class UserFriendParser(WeiboParser):
     def parse(self, url=None):
         if self.bundle.exists == False:
-            return
+            return [], []
         
         url = url or self.url
         br = self.opener.browse_open(url)

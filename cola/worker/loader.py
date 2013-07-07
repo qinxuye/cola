@@ -204,6 +204,8 @@ class BasicWorkerJobLoader(JobLoader):
                     if bundles:
                         self.mq.put([str(b) for b in bundles if b.force is False])
                         self.mq.put([str(b) for b in bundles if b.force is True], force=True)
+                    if hasattr(opener, 'close'):
+                        opener.close()
                         
             self.error_times = 0
         except LoginFailure, e:
@@ -233,6 +235,8 @@ class BasicWorkerJobLoader(JobLoader):
                         forces.append(url)
                 self.mq.put(puts)
                 self.mq.put(forces, force=True)
+                if hasattr(opener, 'close'):
+                    opener.close()
                 
             self.error_times = 0
         except LoginFailure, e:

@@ -88,6 +88,10 @@ class MechanizeOpener(Opener):
         self.browser.open(url, data=data)
         return self.browser
     
+    def close(self):
+        self.browser.response().close()
+        self.browser.clear_history()
+    
 class SpynnerOpener(Opener):
     def __init__(self, user_agent=None, **kwargs):
         try:

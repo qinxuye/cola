@@ -33,9 +33,9 @@ from cola.core.errors import DependencyNotInstalledError
 from login import WeiboLoginFailure
 from bundle import WeiboUserBundle
 from storage import DoesNotExist, WeiboUser, Friend,\
-                    MicroBlog, UserInfo, WorkInfo, EduInfo,\
-                    Comment, Forward
-from conf import fetch_forward, fetch_comment
+                    MicroBlog, Geo, UserInfo, WorkInfo, EduInfo,\
+                    Comment, Forward, Like
+from conf import fetch_forward, fetch_comment, fetch_like
 
 try:
     from bs4 import BeautifulSoup
@@ -125,10 +125,13 @@ class MicroBlogParser(WeiboParser):
                 break
             
             mblog = MicroBlog(mid=mid)
-            mblog.content = div.find('div', attrs={
+            content_div = div.find('div', attrs={
                 'class': 'WB_text', 
                 'node-type': 'feed_list_content'
-            }).text
+            })
+            for img in content_div.find_all("img", attrs={'type': 'face'}):
+                img.replace_with(img['title']);
+            mblog.content = content_div.text
             is_forward = div.get('isforward') == '1'
             if is_forward:
                 name_a = div.find('a', attrs={
@@ -159,6 +162,15 @@ class MicroBlogParser(WeiboParser):
                 mblog.n_comments = 0
             else:
                 mblog.n_comments = int(comments.strip().split('(', 1)[1].strip(')'))
+                
+            # fetch geo info
+            map_info = div.find("div", attrs={'class': 'map_data'})
+            if map_info is not None:
+                geo = Geo()
+                geo.location = map_info.text.split('-')[0].strip()
+                geo_info = urldecode("?"+map_info.find('a')['action-data'])['geo']
+                geo.longtitude, geo.latitude = tuple([float(itm) for itm in geo_info.split(',', 1)])
+                mblog.geo = geo
             
             # fetch forwards and comments
             if fetch_forward or fetch_comment:
@@ -170,22 +182,28 @@ class MicroBlogParser(WeiboParser):
                 if fetch_comment and mblog.n_comments > 0:
                     comment_url = 'http://weibo.com/aj/mblog/info/big?%s' % query_str
                     next_urls.append(comment_url)
+                if fetch_like and mblog.n_likes > 0:
+                    query = {'mid': mid, '_t': 0, '__rnd': int(time.time()*1000)}
+                    query_str = urllib.urlencode(query)
+                    like_url = 'http://weibo.com/aj/like/big?%s' % query_str
+                    next_urls.append(like_url)
             
             weibo_user.statuses.append(mblog)
                 
         params['max_id'] = max_id
+        weibo_user.save()
                 
         # if not has next page
-        if len(divs) < count:
+        #if len(divs) < count:
+        if len(divs) == 0:
             weibo_user.newest_mid = params['end_id']
             weibo_user.save()
             return [], []
         
-        weibo_user.save()
         next_urls.append('%s?%s'%(url.split('?')[0], urllib.urlencode(params)))
         return next_urls, []
     
-class ForwardCommentParser(WeiboParser):
+class ForwardCommentLikeParser(WeiboParser):
     strptime_lock = Lock()
     
     def _strptime(self, string, format_):
@@ -228,7 +246,8 @@ class ForwardCommentParser(WeiboParser):
             return [], []
         
         weibo_user = self.get_weibo_user()
-        mid = urldecode(url)['id']
+        decodes = urldecode(url)
+        mid = decodes.get('id', decodes.get('mid'))
         
         mblogs = weibo_user.statuses
         mblog = None
@@ -263,6 +282,13 @@ class ForwardCommentParser(WeiboParser):
                 set_instance(forward, dl)
                 
                 mblog.forwards.append(forward)
+        elif url.startswith('http://weibo.com/aj/like'):
+            lis = soup.find_all('li', uid=True)
+            for li in lis:
+                like = Like(uid=li['uid'])
+                like.avatar = li.find('img')['src']
+                
+                mblog.likes.append(like)
         
         weibo_user.save()
         
@@ -270,13 +296,19 @@ class ForwardCommentParser(WeiboParser):
             return [], []
         
         params = urldecode(url)
-        next_page_str = soup.find('a', attrs={'class': 'btn_page_next'})\
-                            .find('span')['action-data']
-        new_params = urldecode('?%s'%next_page_str)
-        params.update(new_params)
-        params['__rnd'] = int(time.time()*1000)
-        next_page = '%s?%s' % (url.split('?')[0] , urllib.urlencode(params))
-        return [next_page, ], []
+        next_page = soup.find('a', attrs={'class': 'btn_page_next'})
+        if next_page is not None:
+            try:
+                next_page_str = next_page['action-data']
+            except KeyError:
+                next_page_str = next_page.find('span')['action-data']
+            new_params = urldecode('?%s'%next_page_str)
+            params.update(new_params)
+            params['__rnd'] = int(time.time()*1000)
+            next_page = '%s?%s' % (url.split('?')[0] , urllib.urlencode(params))
+            return [next_page, ], []
+    
+        return [], []
     
 class UserInfoParser(WeiboParser):
     def parse(self, url=None):

@@ -18,3 +18,4 @@ job:
   fetch:
     forward: no
     comment: no
+    like: no

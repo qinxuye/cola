@@ -28,7 +28,7 @@ try:
     from mongoengine import connect, Document, EmbeddedDocument, \
                             DoesNotExist, Q, \
                             StringField, DateTimeField, EmailField, \
-                            BooleanField, URLField, IntField, \
+                            BooleanField, URLField, IntField, FloatField, \
                             ListField, EmbeddedDocumentField
 except ImportError:
     raise DependencyNotInstalledError('mongoengine')
@@ -50,14 +50,25 @@ class Comment(EmbeddedDocument):
     avatar = URLField()
     content = StringField()
     created = DateTimeField()
+    
+class Like(EmbeddedDocument):
+    uid = StringField(required=True)
+    avatar = URLField()
+    
+class Geo(EmbeddedDocument):
+    longtitude = FloatField()
+    latitude = FloatField()
+    location = StringField()
 
 class MicroBlog(EmbeddedDocument):
     mid = StringField(required=True)
     content = StringField()
     forward = StringField()
     created = DateTimeField()
+    geo = EmbeddedDocumentField(Geo)
     
     n_likes = IntField()
+    likes = ListField(EmbeddedDocumentField(Like))
     n_forwards = IntField()
     forwards = ListField(EmbeddedDocumentField(Forward)) 
     n_comments = IntField()

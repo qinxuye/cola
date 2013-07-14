@@ -54,9 +54,6 @@ dodgy_regexes = (
     Replacement('unclosed (numerical) attribute values',
         regex = re.compile('(<[^>]*[a-zA-Z]+\s*=\s*"[0-9]+)( [a-zA-Z]+="\w+"|/?>)'),
         replacement='\\1"\\2'),
-                 
-    Replacement('comment', regex=re.compile(r'<!--[^-]+-->', re.DOTALL),
-        replacement=''),
     )
 
 # strip out a set of nuisance html attributes that can mess up rendering in RSS feeds

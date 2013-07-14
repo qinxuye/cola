@@ -92,18 +92,16 @@ class MicroBlogParser(WeiboParser):
         params['_t'] = 0
         params['__rnd'] = str(int(time.time() * 1000))
         page = int(params.get('page', 1))
-        pre_page = int(params.get('pre_page', 0))
-        count = 15
+        pre_page = params.get('pre_page', 1)
         if 'pagebar' not in params:
             params['pagebar'] = '0'
-            pre_page += 1
         elif params['pagebar'] == '0':
             params['pagebar'] = '1'
         elif params['pagebar'] == '1':
             del params['pagebar']
             pre_page = page
             page += 1
-            count = 50
+        count = 15
         params['count'] = count
         params['page'] = page
         params['pre_page'] = pre_page
@@ -175,7 +173,7 @@ class MicroBlogParser(WeiboParser):
                 mblog.geo = geo
             
             # fetch forwards and comments
-            if fetch_forward or fetch_comment or fetch_like:
+            if fetch_forward or fetch_comment:
                 query = {'id': mid, '_t': 0, '__rnd': int(time.time()*1000)}
                 query_str = urllib.urlencode(query)
                 if fetch_forward and mblog.n_forwards > 0:
@@ -191,11 +189,8 @@ class MicroBlogParser(WeiboParser):
                     next_urls.append(like_url)
             
             weibo_user.statuses.append(mblog)
-        
-        if 'pagebar' in params:
-            params['max_id'] = max_id
-        else:
-            del params['max_id']
+                
+        params['max_id'] = max_id
         weibo_user.save()
                 
         # if not has next page

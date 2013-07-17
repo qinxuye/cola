@@ -44,9 +44,8 @@ class Test(unittest.TestCase):
         parser = MicroBlogParser(opener=self.opener, 
                                  url=test_url, 
                                  bundle=self.bundle)
-        urls, bundles = parser.parse()
+        _, bundles = parser.parse()
            
-        self.assertNotEqual(len(urls), 1)
         self.assertEqual(len(bundles), 0)
             
         user = self.collection.find_one({'uid': self.test_uid})
@@ -55,20 +54,32 @@ class Test(unittest.TestCase):
     def testMicroBlogForwardsParser(self):
         test_url = 'http://weibo.com/aj/mblog/info/big?id=3596988739933218&_t=0&__rnd=1373094212593'
         parser = ForwardCommentLikeParser(opener=self.opener,
-                                      url=test_url,
-                                      bundle=self.bundle)
+                                          url=test_url,
+                                          bundle=self.bundle)
         urls, _ = parser.parse()
         
         self.assertEqual(len(urls), 1)
         
         user = self.collection.find_one({'uid': self.test_uid})
-        self.assertEqual(len(user['statuses'][0]['forwards']), 20)
+        self.assertLessEqual(len(user['statuses'][0]['forwards']), 20)
+        self.assertGreater(len(user['statuses'][0]['forwards']), 0)
         
         parser.parse(urls[0])
         user = self.collection.find_one({'uid': self.test_uid})
-        self.assertEqual(len(user['statuses'][0]['forwards']), 40)
+        self.assertLessEqual(len(user['statuses'][0]['forwards']), 40)
+        self.assertGreater(len(user['statuses'][0]['forwards']), 20)
         self.assertNotEqual(user['statuses'][0]['forwards'][0], 
                             user['statuses'][0]['forwards'][20])
+        
+    def testMicroBlogForwardTimeParser(self):
+        test_url = 'http://weibo.com/aj/mblog/info/big?_t=0&id=3600369441313426&__rnd=1373977781515'
+        parser = ForwardCommentLikeParser(opener=self.opener,
+                                          url=test_url,
+                                          bundle=self.bundle)
+        parser.parse()
+        
+        user = self.collection.find_one({'uid': self.test_uid})
+        self.assertGreater(len(user['statuses'][0]['forwards']), 0)
         
     def testMicroBlogLikesParser(self):
         test_url = 'http://weibo.com/aj/like/big?mid=3599246068109415&_t=0&__rnd=1373634556882'

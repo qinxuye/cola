@@ -231,7 +231,10 @@ class ForwardCommentLikeParser(WeiboParser):
             dt = self._strptime(dt_str, '%Y-%m-%d %H:%M')
         elif u'月' in dt_str and u'日' in dt_str:
             this_year = datetime.now().year
-            dt = self._strptime('%s %s' % (this_year, dt_str), '%Y %m月%d日 %H:%M')
+            date_str = '%s %s' % (this_year, dt_str)
+            if isinstance(date_str, unicode):
+                date_str = date_str.encode('utf-8')
+            dt = self._strptime(date_str, '%Y %m月%d日 %H:%M')
         else:
             dt = parse(dt_str)
         return dt

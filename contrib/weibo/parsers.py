@@ -396,9 +396,9 @@ class UserInfoParser(WeiboParser):
                 else:
                     text = p.text
                     if text.startswith(u'地区：'):
-                        work_info.location = text.split('：', 1)[1]
+                        work_info.location = text.split(u'：', 1)[1]
                     elif text.startswith(u'职位：'):
-                        work_info.position = text.split('：', 1)[1]
+                        work_info.position = text.split(u'：', 1)[1]
                     else:
                         work_info.detail = text
             weibo_user.info.work.append(work_info)

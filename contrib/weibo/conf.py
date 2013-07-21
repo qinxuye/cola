@@ -36,6 +36,12 @@ mongo_host = user_config.job.mongo.host
 mongo_port = user_config.job.mongo.port
 db_name = user_config.job.db
 
+shard_key = user_config.job.mongo.shard_key
+if shard_key is not None:
+    shard_key = tuple([itm['key'] for itm in shard_key])
+else:
+    shard_key = tuple()
+
 instances = user_config.job.instances
 
 fetch_forward = user_config.job.fetch.forward

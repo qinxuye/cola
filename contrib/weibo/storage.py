@@ -22,7 +22,7 @@ Created on 2013-6-9
 
 from cola.core.errors import DependencyNotInstalledError
 
-from conf import mongo_host, mongo_port, db_name
+from conf import mongo_host, mongo_port, db_name, shard_key
 
 try:
     from mongoengine import connect, Document, EmbeddedDocument, \
@@ -110,10 +110,14 @@ class Friend(EmbeddedDocument):
     sex = BooleanField
     
 class WeiboUser(Document):
-    uid = StringField()
+    uid = StringField(required=True)
     newest_mid = StringField()
     
     statuses = ListField(EmbeddedDocumentField(MicroBlog))
     info = EmbeddedDocumentField(UserInfo)
     follows = ListField(EmbeddedDocumentField(Friend))
     fans = ListField(EmbeddedDocumentField(Friend))
+    
+    meta = {
+        'shard_key': shard_key
+    }

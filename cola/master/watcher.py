@@ -237,9 +237,8 @@ class MasterWatcher(object):
             f = os.path.join(dirname, 'loader.py')
             workers = ['%s:%s'%(node, worker_port) for node in nodes]
             
-            cmds = ['python', f, '-j', job_dir, '-i', self.ip_address]
-            for worker in workers:
-                cmds.extend(['-n', worker])
+            cmds = ['python', f, '-j', job_dir, '-i', self.ip_address, 
+                    '-n', ' '.join(workers)]
             if self.data_path is not None:
                 cmds.extend(['-d', self.data_path])
             if self.force:

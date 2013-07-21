@@ -249,6 +249,8 @@ if __name__ == '__main__':
     data_path = args.data
     ip_address = args.ip
     nodes = args.nodes
+    if len(nodes) == 1:
+        nodes = nodes[0].split(' ')
     force = args.force
     client = args.client
     load_job(path, nodes, ip_address=ip_address, 

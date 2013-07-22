@@ -33,8 +33,8 @@ from conf import starts, user_config, instances
 from bundle import WeiboUserBundle
 
 def login_hook(opener, **kw):
-    username = kw['username']
-    passwd = kw['password']
+    username = str(kw['username'])
+    passwd = str(kw['password'])
     
     loginer = WeiboLogin(opener, username, passwd)
     return loginer.login()

@@ -199,9 +199,9 @@ class MicroBlogParser(WeiboParser):
         weibo_user.save()
                 
         # if not has next page
-        #if len(divs) < count:
         if len(divs) == 0:
-            weibo_user.newest_mid = params['end_id']
+            if 'end_id' in params:
+                weibo_user.newest_mid = params['end_id']
             weibo_user.save()
             return [], []
         

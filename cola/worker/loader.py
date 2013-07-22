@@ -189,6 +189,7 @@ class BasicWorkerJobLoader(JobLoader):
         bundle = self.job.unit_cls(obj)
         urls = bundle.urls()
         
+        url = None
         try:
             while len(urls) > 0 and not self.stopped:
                 url = urls.pop(0)
@@ -215,6 +216,8 @@ class BasicWorkerJobLoader(JobLoader):
                 self.error(obj)
         except Exception, e:
             self.error_times += 1
+            if self.logger is not None and url is not None:
+                self.logger.error('Error when fetch url: %s' % url)
             self._log_error(obj, e)
             self.error(obj)
             

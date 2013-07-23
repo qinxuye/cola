@@ -30,6 +30,9 @@ class WeiboUserBundle(Bundle):
         self.uid = uid
         self.exists = True
         
+        self.last_error_page = None
+        self.last_error_page_times = 0
+        
     def urls(self):
         start = int(time.time() * (10**6))
         return [

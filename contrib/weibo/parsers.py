@@ -23,6 +23,7 @@ Created on 2013-6-8
 import time
 import json
 import urllib
+from urllib2 import URLError
 from datetime import datetime, timedelta
 from threading import Lock
 
@@ -34,7 +35,7 @@ from login import WeiboLoginFailure
 from bundle import WeiboUserBundle
 from storage import DoesNotExist, WeiboUser, Friend,\
                     MicroBlog, Geo, UserInfo, WorkInfo, EduInfo,\
-                    Comment, Forward, Like
+                    Comment, Forward, Like, ValidationError
 from conf import fetch_forward, fetch_comment, fetch_like
 
 try:
@@ -239,13 +240,30 @@ class ForwardCommentLikeParser(WeiboParser):
             dt = parse(dt_str)
         return dt
     
+    def _error(self, url, e):
+        if self.bundle.last_error_page == url:
+            self.bundle.last_error_page_times += 1
+        else:
+            self.bundle.last_error_page = url
+            self.bundle.last_error_page_times = 0
+            
+        if self.bundle.last_error_page_times >= 10:
+            raise e
+        return [url, ], []
+    
     def parse(self, url=None):
         if self.bundle.exists == False:
             return [], []
         
         url = url or self.url
-        br = self.opener.browse_open(url)
-        jsn = json.loads(br.response().read())
+        br = None
+        jsn = None
+        try:
+            br = self.opener.browse_open(url)
+            jsn = json.loads(br.response().read())
+        except (ValueError, URLError) as e:
+            return self._error(url, e)
+        
         soup = BeautifulSoup(jsn['data']['html'])
         current_page = jsn['data']['page']['pagenum']
         n_pages = jsn['data']['page']['totalpage']
@@ -298,7 +316,10 @@ class ForwardCommentLikeParser(WeiboParser):
                 
                 mblog.likes.append(like)
         
-        weibo_user.save()
+        try:
+            weibo_user.save()
+        except ValidationError, e:
+            return self._error(url, e)
         
         if current_page >= n_pages:
             return [], []
@@ -457,6 +478,11 @@ class UserFriendParser(WeiboParser):
         ul = html.find(attrs={'class': 'cnfList', 'node-type': 'userListBox'})
         if ul is None:
             return [], bundles
+        
+        if is_follow:
+            weibo_user.follows = []
+        else:
+            weibo_user.fans = []
         for li in ul.find_all(attrs={'class': 'S_line1', 'action-type': 'itemClick'}):
             data = dict([l.split('=') for l in li['action-data'].split('&')])
             

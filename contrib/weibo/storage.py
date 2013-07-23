@@ -29,7 +29,8 @@ try:
                             DoesNotExist, Q, \
                             StringField, DateTimeField, EmailField, \
                             BooleanField, URLField, IntField, FloatField, \
-                            ListField, EmbeddedDocumentField
+                            ListField, EmbeddedDocumentField, \
+                            ValidationError
 except ImportError:
     raise DependencyNotInstalledError('mongoengine')
 
@@ -37,6 +38,7 @@ connect(db_name, host=mongo_host, port=mongo_port)
 
 DoesNotExist = DoesNotExist
 Q = Q
+ValidationError = ValidationError
 
 class Forward(EmbeddedDocument):
     mid = StringField(required=True)

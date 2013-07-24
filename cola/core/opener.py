@@ -89,7 +89,9 @@ class MechanizeOpener(Opener):
         return self.browser
     
     def close(self):
-        self.browser.response().close()
+        resp = self.browser.response()
+        if resp is not None:
+            resp.close()
         self.browser.clear_history()
     
 class SpynnerOpener(Opener):

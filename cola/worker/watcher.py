@@ -31,7 +31,7 @@ from cola.core.utils import get_ip, import_job, root_dir
 from cola.core.zip import ZipHandler
 from cola.core.config import main_conf
 
-TIME_SLEEP = 10
+TIME_SLEEP = 20
 
 class WorkerWatcherRunning(Exception): pass
 

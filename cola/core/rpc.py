@@ -26,6 +26,8 @@ import xmlrpclib
 import os
 import socket
 
+RETRY_TIMES = 10
+
 class ColaRPCServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     
     def __init__(self, *args, **kwargs):
@@ -37,7 +39,15 @@ def client_call(server, func_name, *args, **kwargs):
     serv = xmlrpclib.ServerProxy('http://%s' % server)
     ignore = kwargs.get('ignore', False)
     if not ignore:
-        return getattr(serv, func_name)(*args)
+        err = None
+        retry_times = 0
+        while retry_times <= RETRY_TIMES:
+            try:
+                return getattr(serv, func_name)(*args)
+            except socket.error, e:
+                retry_times += 1
+                err = e
+        raise err
     else:
         try:
             return getattr(serv, func_name)(*args)

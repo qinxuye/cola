@@ -34,8 +34,8 @@ from cola.core.utils import get_ip, get_ips, \
 from cola.core.config import main_conf
 
 RUNNING, HANGUP, STOPPED = range(3)
-CONTINOUS_HEARTBEAT = 60
-HEARTBEAT_INTERVAL = 10
+CONTINOUS_HEARTBEAT = 90
+HEARTBEAT_INTERVAL = 20
 HEARTBEAT_CHECK_INTERVAL = 3*HEARTBEAT_INTERVAL
 
 class MasterWatcherRunning(Exception): pass

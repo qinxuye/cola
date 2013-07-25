@@ -22,7 +22,6 @@ Created on 2013-5-27
 
 import threading
 import signal
-import socket
 import os
 
 from cola.core.rpc import client_call
@@ -150,10 +149,7 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
         
     def stop(self):
         for node in self.nodes:
-            try:
-                client_call(node, 'stop')
-            except socket.error:
-                pass
+            client_call(node, 'stop', ignore=True)
         self.finish()
         
     def signal_handler(self, signum, frame):
@@ -176,14 +172,15 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
                 
     def add_node(self, node):
         for node in self.nodes:
-            client_call(node, 'add_node', node)
+            client_call(node, 'add_node', node, ignore=True)
         self.nodes.append(node)
-        client_call(node, 'run')
+        client_call(node, 'run', ignore=True)
         
     def remove_node(self, node):
         for node in self.nodes:
-            client_call(node, 'remove_node', node)
-        self.nodes.remove(node)
+            client_call(node, 'remove_node', node, ignore=True)
+        if node in self.nodes:
+            self.nodes.remove(node)
         
     def run(self):
         self.ready_lock.acquire()
@@ -195,11 +192,8 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
             
         self.finish_lock.acquire()
         
-        try:
-            master_watcher = '%s:%s' % (get_ip(), main_conf.master.port)
-            client_call(master_watcher, 'finish_job', self.job.real_name)
-        except socket.error:
-            pass
+        master_watcher = '%s:%s' % (get_ip(), main_conf.master.port)
+        client_call(master_watcher, 'finish_job', self.job.real_name, ignore=True)
         
     def __enter__(self):
         return self

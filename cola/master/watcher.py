@@ -53,13 +53,13 @@ class MasterJobInfo(object):
         if ':' not in node:
             node = '%s:%s' % (node, self.worker_port)
         self.nodes.append(node)
-        client_call(self.job_master, 'add_node', node)
+        client_call(self.job_master, 'add_node', node, ignore=True)
         
     def remove_worker(self, node):
         if ':' not in node:
             node = '%s:%s' % (node, self.worker_port)
         self.nodes.remove(node)
-        client_call(self.job_master, 'remove_node', node)
+        client_call(self.job_master, 'remove_node', node, ignore=True)
         
     def has_worker(self, node):
         if ':' not in node:
@@ -250,7 +250,7 @@ class MasterWatcher(object):
             
             # call workers to start job
             for worker_watcher in self.nodes_watchers:
-                client_call(worker_watcher, 'start_job', zip_filename, uncompress)
+                client_call(worker_watcher, 'start_job', zip_filename, uncompress, ignore=True)
     
     def stop_job(self, job_real_name):
         if job_real_name not in self.running_jobs:
@@ -258,10 +258,10 @@ class MasterWatcher(object):
         job_info = self.running_jobs[job_real_name]
         
         try:
-            client_call(job_info.job_master, 'stop')
+            client_call(job_info.job_master, 'stop', ignore=True)
         finally:
             for watcher in self.nodes_watchers.keys():
-                client_call(watcher, 'kill', job_real_name)
+                client_call(watcher, 'kill', job_real_name, ignore=True)
             self.kill(job_real_name)
         
         return True
@@ -275,7 +275,7 @@ class MasterWatcher(object):
         shutil.rmtree(path)
         
         for watcher in self.nodes_watchers:
-            client_call(watcher, 'clear_job')
+            client_call(watcher, 'clear_job', ignore=True)
     
     def stop(self):
         # stop all jobs
@@ -283,7 +283,7 @@ class MasterWatcher(object):
             self.stop_job(job_name)
             
         for watcher in self.nodes_watchers:
-            client_call(watcher, 'stop')
+            client_call(watcher, 'stop', ignore=True)
         self.finish()
         
     def kill(self, job_realname):

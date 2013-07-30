@@ -513,7 +513,13 @@ class UserFriendParser(WeiboParser):
         bundles = []
         ul = html.find(attrs={'class': 'cnfList', 'node-type': 'userListBox'})
         if ul is None:
-            return [], bundles
+            urls = []
+            if is_follow is True:
+                if is_new_mode:
+                    urls.append('http://weibo.com/%s/follow?relate=fans' % self.uid)
+                else:
+                    urls.append('http://weibo.com/%s/fans' % self.uid)
+            return urls, bundles
         
         if is_follow:
             weibo_user.follows = []
@@ -546,10 +552,5 @@ class UserFriendParser(WeiboParser):
                         url.split('?')[0], 
                         (int(urldecode(url).get('page', 1))+1))
                     urls.append(url)
-        elif is_follow:
-            if is_new_mode:
-                urls.append('http://weibo.com/%s/follow?relate=fans' % self.uid)
-            else:
-                urls.append('http://weibo.com/%s/fans' % self.uid)
-                    
+        
         return urls, bundles

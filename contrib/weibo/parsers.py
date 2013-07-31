@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 from threading import Lock
 
 from cola.core.parsers import Parser
-from cola.core.utils import urldecode
+from cola.core.utils import urldecode, beautiful_soup
 from cola.core.errors import DependencyNotInstalledError
 
 from login import WeiboLoginFailure
@@ -37,11 +37,6 @@ from storage import DoesNotExist, WeiboUser, Friend,\
                     MicroBlog, Geo, UserInfo, WorkInfo, EduInfo,\
                     Comment, Forward, Like, ValidationError
 from conf import fetch_forward, fetch_comment, fetch_like
-
-try:
-    from bs4 import BeautifulSoup
-except ImportError:
-    raise DependencyNotInstalledError('BeautifulSoup4')
 
 try:
     from dateutil.parser import parse
@@ -75,6 +70,17 @@ class WeiboParser(Parser):
             weibo_user = WeiboUser(uid=self.uid)
             weibo_user.save()
         return weibo_user
+    
+    def _error(self, url, e):
+        if self.bundle.last_error_page == url:
+            self.bundle.last_error_page_times += 1
+        else:
+            self.bundle.last_error_page = url
+            self.bundle.last_error_page_times = 0
+            
+        if self.bundle.last_error_page_times >= 10:
+            raise e
+        return [url, ], []
 
 class MicroBlogParser(WeiboParser):
     def parse(self, url=None):
@@ -110,7 +116,7 @@ class MicroBlogParser(WeiboParser):
         params['pre_page'] = pre_page
         
         data = json.loads(br.response().read())['data']
-        soup = BeautifulSoup(data)
+        soup = beautiful_soup(data)
         
         divs = soup.find_all('div', attrs={'class': 'WB_feed_type'},  mid=True)
         max_id = None
@@ -240,17 +246,6 @@ class ForwardCommentLikeParser(WeiboParser):
             dt = parse(dt_str)
         return dt
     
-    def _error(self, url, e):
-        if self.bundle.last_error_page == url:
-            self.bundle.last_error_page_times += 1
-        else:
-            self.bundle.last_error_page = url
-            self.bundle.last_error_page_times = 0
-            
-        if self.bundle.last_error_page_times >= 10:
-            raise e
-        return [url, ], []
-    
     def parse(self, url=None):
         if self.bundle.exists == False:
             return [], []
@@ -264,7 +259,7 @@ class ForwardCommentLikeParser(WeiboParser):
         except (ValueError, URLError) as e:
             return self._error(url, e)
         
-        soup = BeautifulSoup(jsn['data']['html'])
+        soup = beautiful_soup(jsn['data']['html'])
         current_page = jsn['data']['page']['pagenum']
         n_pages = jsn['data']['page']['totalpage']
         
@@ -346,7 +341,7 @@ class UserInfoParser(WeiboParser):
         
         url = url or self.url
         br = self.opener.browse_open(url)
-        soup = BeautifulSoup(br.response().read())
+        soup = beautiful_soup(br.response().read())
         
         if not self.check(url, br):
             return [], []
@@ -367,7 +362,7 @@ class UserInfoParser(WeiboParser):
                 data = json.loads(text)
                 domid = data['domid']
                 if domid == 'Pl_Official_LeftInfo__13':
-                    info_soup = BeautifulSoup(data['html'])
+                    info_soup = beautiful_soup(data['html'])
                     info_div = info_soup.find('div', attrs={'class': 'profile_pinfo'})
                     for block_div in info_div.find_all('div', attrs={'class': 'infoblock'}):
                         block_title = block_div.find('form').text.strip()
@@ -380,7 +375,7 @@ class UserInfoParser(WeiboParser):
                         elif block_title == u'标签信息':
                             tags_div = block_div
                 elif domid == 'Pl_Official_Header__1':
-                    header_soup = BeautifulSoup(data['html'])
+                    header_soup = beautiful_soup(data['html'])
                     weibo_user.info.avatar = header_soup.find('div', attrs={'class': 'pf_head_pic'})\
                                                 .find('img')['src']
             elif 'STK' in text:
@@ -388,15 +383,15 @@ class UserInfoParser(WeiboParser):
                 data = json.loads(text)
                 pid = data['pid']
                 if pid == 'pl_profile_infoBase':
-                    profile_div = BeautifulSoup(data['html'])
+                    profile_div = beautiful_soup(data['html'])
                 elif pid == 'pl_profile_infoCareer':
-                    career_div = BeautifulSoup(data['html'])
+                    career_div = beautiful_soup(data['html'])
                 elif pid == 'pl_profile_infoEdu':
-                    edu_div = BeautifulSoup(data['html'])
+                    edu_div = beautiful_soup(data['html'])
                 elif pid == 'pl_profile_infoTag':
-                    tags_div = BeautifulSoup(data['html'])
+                    tags_div = beautiful_soup(data['html'])
                 elif pid == 'pl_profile_photo':
-                    soup = BeautifulSoup(data['html'])
+                    soup = beautiful_soup(data['html'])
                     weibo_user.info.avatar = soup.find('img')['src']
         
         profile_map = {
@@ -478,8 +473,13 @@ class UserFriendParser(WeiboParser):
             return [], []
         
         url = url or self.url
-        br = self.opener.browse_open(url)
-        soup = BeautifulSoup(br.response().read())
+        
+        br, soup = None, None
+        try:
+            br = self.opener.browse_open(url)
+            soup = beautiful_soup(br.response().read())
+        except Exception, e:
+            return self._error(url, e)
         
         if not self.check(url, br):
             return [], []
@@ -493,10 +493,14 @@ class UserFriendParser(WeiboParser):
             text = script.text
             if 'FM.view' in text:
                 text = text.replace('FM.view(', '')[:-1]
-                data = json.loads(text)
+                data = None
+                try:
+                    data = json.loads(text)
+                except ValueError, e:
+                    return self._error(url, e)
                 domid = data['domid']
                 if domid == 'Pl_Official_LeftHisRelation__15':
-                    html = BeautifulSoup(data['html'])
+                    html = beautiful_soup(data['html'])
                 decodes = urldecode(url)
                 if 'relate' in decodes and decodes['relate'] == 'fans':
                     is_follow = False
@@ -506,12 +510,16 @@ class UserFriendParser(WeiboParser):
                 data = json.loads(text)
                 if data['pid'] == 'pl_relation_hisFollow' or \
                     data['pid'] == 'pl_relation_hisFans':
-                    html = BeautifulSoup(data['html'])
+                    html = beautiful_soup(data['html'])
                 if data['pid'] == 'pl_relation_hisFans':
                     is_follow = False    
         
         bundles = []
-        ul = html.find(attrs={'class': 'cnfList', 'node-type': 'userListBox'})
+        ul = None
+        try:
+            ul = html.find(attrs={'class': 'cnfList', 'node-type': 'userListBox'})
+        except AttributeError, e:
+            return self._error(url, e)
         if ul is None:
             urls = []
             if is_follow is True:
@@ -552,5 +560,11 @@ class UserFriendParser(WeiboParser):
                         url.split('?')[0], 
                         (int(urldecode(url).get('page', 1))+1))
                     urls.append(url)
+        elif is_follow is True:
+            if is_new_mode:
+                urls.append('http://weibo.com/%s/follow?relate=fans' % self.uid)
+            else:
+                urls.append('http://weibo.com/%s/fans' % self.uid)
+            return urls, bundles
         
         return urls, bundles

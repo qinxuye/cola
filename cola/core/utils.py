@@ -25,6 +25,8 @@ import os
 import sys
 import urllib
 
+from cola.core.errors import DependencyNotInstalledError
+
 def add_localhost(func):
     def inner(*args, **kwargs):
         ips = func(*args, **kwargs)
@@ -79,3 +81,16 @@ def urldecode(link):
             k, v = tuple(param.split('='))
             decodes[k] = urllib.unquote(v)
     return decodes
+
+def beautiful_soup(html, logger=None):
+    try:
+        from bs4 import BeautifulSoup, FeatureNotFound
+    except ImportError:
+        raise DependencyNotInstalledError("BeautifulSoup4")
+    
+    try:
+        return BeautifulSoup(html, 'lxml')
+    except FeatureNotFound:
+        if logger is not None:
+            logger.info('lxml not installed')
+        return BeautifulSoup(html)

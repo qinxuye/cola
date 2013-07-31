@@ -23,8 +23,9 @@ Created on 2013-6-16
 import re
 
 from cola.core.logs import get_logger
+from cola.core.utils import beautiful_soup
 
-from cola.core.extractor.utils import absolute_url, beautiful_soup
+from cola.core.extractor.utils import absolute_url
 
 __all__ = ['PreProcessor']
 

@@ -22,21 +22,6 @@ Created on 2013-6-16
 
 from urlparse import urlparse
 
-from cola.core.errors import DependencyNotInstalledError
-
-try:
-    from bs4 import BeautifulSoup, FeatureNotFound
-except ImportError:
-    raise DependencyNotInstalledError("BeautifulSoup4")
-
-def beautiful_soup(html, logger=None):
-    try:
-        return BeautifulSoup(html, 'lxml')
-    except FeatureNotFound:
-        if logger is not None:
-            logger.info('lxml not installed')
-        return BeautifulSoup(html)
-
 def host_for_url(url):
     """
     >>> host_for_url('http://base/whatever/fdsh')

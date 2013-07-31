@@ -24,6 +24,7 @@ import re
 
 from cola.core.logs import get_logger
 from cola.core.errors import DependencyNotInstalledError
+from cola.core.utils import beautiful_soup
 
 try:
     from bs4 import NavigableString
@@ -31,7 +32,6 @@ except ImportError:
     raise DependencyNotInstalledError("BeautifulSoup4")
 
 from cola.core.extractor.preprocess import PreProcessor
-from cola.core.extractor.utils import beautiful_soup
 
 __all__ = ['Extractor']
 

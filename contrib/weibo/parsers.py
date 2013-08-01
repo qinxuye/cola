@@ -23,6 +23,7 @@ Created on 2013-6-8
 import time
 import json
 import urllib
+import logging
 from urllib2 import URLError
 from datetime import datetime, timedelta
 from threading import Lock
@@ -30,10 +31,11 @@ from threading import Lock
 from cola.core.parsers import Parser
 from cola.core.utils import urldecode, beautiful_soup
 from cola.core.errors import DependencyNotInstalledError
+from cola.core.logs import get_logger
 
 from login import WeiboLoginFailure
 from bundle import WeiboUserBundle
-from storage import DoesNotExist, WeiboUser, Friend,\
+from storage import DoesNotExist, Q, WeiboUser, Friend,\
                     MicroBlog, Geo, UserInfo, WorkInfo, EduInfo,\
                     Comment, Forward, Like, ValidationError
 from conf import fetch_forward, fetch_comment, fetch_like
@@ -48,6 +50,8 @@ class WeiboParser(Parser):
         super(WeiboParser, self).__init__(opener=opener, url=url, **kwargs)
         self.bundle = bundle
         self.uid = bundle.label
+        if not hasattr(self, 'logger') or self.logger is None:
+            self.logger = get_logger(name='weibo_parser')
     
     def _check_url(self, dest_url, src_url):
         return dest_url.split('?')[0] == src_url.split('?')[0]
@@ -63,13 +67,15 @@ class WeiboParser(Parser):
         return True
     
     def get_weibo_user(self):
-        weibo_user = None
+        if self.bundle.weibo_user is not None:
+            return self.bundle.weibo_user
+        
         try:
-            weibo_user = getattr(WeiboUser, 'objects').get(uid=self.uid)
+            self.bundle.weibo_user = getattr(WeiboUser, 'objects').get(uid=self.uid)
         except DoesNotExist:
-            weibo_user = WeiboUser(uid=self.uid)
-            weibo_user.save()
-        return weibo_user
+            self.bundle.weibo_user = WeiboUser(uid=self.uid)
+            self.bundle.weibo_user.save()
+        return self.bundle.weibo_user
     
     def _error(self, url, e):
         if self.bundle.last_error_page == url:
@@ -90,6 +96,7 @@ class MicroBlogParser(WeiboParser):
         url = url or self.url
         params = urldecode(url)
         br = self.opener.browse_open(url)
+        self.logger.debug('load %s finish' % url)
         
         if not self.check(url, br):
             return [], []
@@ -117,6 +124,7 @@ class MicroBlogParser(WeiboParser):
         
         data = json.loads(br.response().read())['data']
         soup = beautiful_soup(data)
+        finished = False
         
         divs = soup.find_all('div', attrs={'class': 'WB_feed_type'},  mid=True)
         max_id = None
@@ -129,11 +137,16 @@ class MicroBlogParser(WeiboParser):
             
             if 'end_id' not in params:
                 params['end_id'] = mid
-            if weibo_user.newest_mid is not None and \
-                weibo_user.newest_mid == mid:
+            if mid in weibo_user.newest_mids:
+                finished = True
                 break
+            if len(self.bundle.newest_mids) < 3:
+                self.bundle.newest_mids.append(mid)
             
-            mblog = MicroBlog(mid=mid)
+            try:
+                mblog = getattr(MicroBlog, 'objects').get(Q(mid=mid)&Q(uid=self.uid))
+            except DoesNotExist:
+                mblog = MicroBlog(mid=mid, uid=self.uid)
             content_div = div.find('div', attrs={
                 'class': 'WB_text', 
                 'node-type': 'feed_list_content'
@@ -157,6 +170,14 @@ class MicroBlogParser(WeiboParser):
                         text_a.text
                     )
             mblog.created = parse(div.select('a.S_link2.WB_time')[0]['title'])
+            
+            if self.bundle.last_update is None or mblog.created > self.bundle.last_update:
+                self.bundle.last_update = mblog.created
+            if weibo_user.last_update is not None and \
+                mblog.created <= weibo_user.last_update:
+                finished = True
+                break
+            
             likes = div.find('a', attrs={'action-type': 'feed_list_like'}).text
             likes = likes.strip('(').strip(')')
             likes = 0 if len(likes) == 0 else int(likes)
@@ -197,18 +218,23 @@ class MicroBlogParser(WeiboParser):
                     like_url = 'http://weibo.com/aj/like/big?%s' % query_str
                     next_urls.append(like_url)
             
-            weibo_user.statuses.append(mblog)
+            mblog.save()
         
         if 'pagebar' in params:
             params['max_id'] = max_id
         else:
             del params['max_id']
-        weibo_user.save()
+        self.logger.debug('parse %s finish' % url)
                 
         # if not has next page
-        if len(divs) == 0:
-            if 'end_id' in params:
-                weibo_user.newest_mid = params['end_id']
+        if len(divs) == 0 or finished:
+            weibo_user = self.get_weibo_user()
+            for mid in self.bundle.newest_mids:
+                if mid not in self.bundle.newest_mids:
+                    weibo_user.newest_mids.append(mid)
+            while len(weibo_user.newest_mids) > 3:
+                weibo_user.newest_mids.pop()
+            weibo_user.last_update = self.bundle.last_update
             weibo_user.save()
             return [], []
         
@@ -255,6 +281,7 @@ class ForwardCommentLikeParser(WeiboParser):
         jsn = None
         try:
             br = self.opener.browse_open(url)
+            self.logger.debug('load %s finish' % url)
             jsn = json.loads(br.response().read())
         except (ValueError, URLError) as e:
             return self._error(url, e)
@@ -266,19 +293,16 @@ class ForwardCommentLikeParser(WeiboParser):
         if not self.check(url, br):
             return [], []
         
-        weibo_user = self.get_weibo_user()
         decodes = urldecode(url)
         mid = decodes.get('id', decodes.get('mid'))
         
-        mblogs = weibo_user.statuses
-        mblog = None
-        for m in mblogs:
-            if m.mid == mid:
-                mblog = m
-                break
-        if mblog is None:
-            mblog = MicroBlog(mid=mid)
-            weibo_user.statuses.append(mblog)
+        mblog = self.bundle.current_mblog
+        if mblog is None or mblog.mid != mid:
+            try:
+                mblog = getattr(MicroBlog, 'objects').get(Q(mid=mid)&Q(uid=self.uid))
+            except DoesNotExist:
+                mblog = MicroBlog(mid=mid, uid=self.uid)
+                mblog.save()
         
         def set_instance(instance, dl):
             instance.avatar = dl.find('dt').find('img')['src']
@@ -312,7 +336,8 @@ class ForwardCommentLikeParser(WeiboParser):
                 mblog.likes.append(like)
         
         try:
-            weibo_user.save()
+            mblog.save()
+            self.logger.debug('parse %s finish' % url)
         except ValidationError, e:
             return self._error(url, e)
         
@@ -322,6 +347,8 @@ class ForwardCommentLikeParser(WeiboParser):
         params = urldecode(url)
         next_page = soup.find('a', attrs={'class': 'btn_page_next'})
         if next_page is not None:
+            self.bundle.current_mblog = mblog
+            
             try:
                 next_page_str = next_page['action-data']
             except KeyError:
@@ -341,6 +368,7 @@ class UserInfoParser(WeiboParser):
         
         url = url or self.url
         br = self.opener.browse_open(url)
+        self.logger.debug('load %s finish' % url)
         soup = beautiful_soup(br.response().read())
         
         if not self.check(url, br):
@@ -465,6 +493,7 @@ class UserInfoParser(WeiboParser):
                     weibo_user.info.tags.append(a.text)
                 
         weibo_user.save()
+        self.logger.debug('parse %s finish' % url)
         return [], []
     
 class UserFriendParser(WeiboParser):
@@ -477,6 +506,7 @@ class UserFriendParser(WeiboParser):
         br, soup = None, None
         try:
             br = self.opener.browse_open(url)
+            self.logger.debug('load %s finish' % url)
             soup = beautiful_soup(br.response().read())
         except Exception, e:
             return self._error(url, e)
@@ -548,6 +578,7 @@ class UserFriendParser(WeiboParser):
                 weibo_user.fans.append(friend)
                 
         weibo_user.save()
+        self.logger.debug('parse %s finish' % url)
         
         urls = []
         pages = html.find('div', attrs={'class': 'W_pages', 'node-type': 'pageList'})
@@ -556,15 +587,15 @@ class UserFriendParser(WeiboParser):
             if len(a) > 0:
                 next_ = a[-1]
                 if next_['class'] == ['W_btn_c']:
-                    url = '%s?page=%s' % (
-                        url.split('?')[0], 
-                        (int(urldecode(url).get('page', 1))+1))
+                    decodes = urldecode(url)
+                    decodes['page'] = int(decodes.get('page', 1)) + 1
+                    query_str = urllib.urlencode(decodes)
+                    url = '%s?%s' % (url.split('?')[0], query_str)
                     urls.append(url)
         elif is_follow is True:
             if is_new_mode:
                 urls.append('http://weibo.com/%s/follow?relate=fans' % self.uid)
             else:
                 urls.append('http://weibo.com/%s/fans' % self.uid)
-            return urls, bundles
         
         return urls, bundles

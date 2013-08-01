@@ -62,8 +62,9 @@ class Geo(EmbeddedDocument):
     latitude = FloatField()
     location = StringField()
 
-class MicroBlog(EmbeddedDocument):
+class MicroBlog(Document):
     mid = StringField(required=True)
+    uid = StringField(required=True)
     content = StringField()
     forward = StringField()
     created = DateTimeField()
@@ -113,9 +114,9 @@ class Friend(EmbeddedDocument):
     
 class WeiboUser(Document):
     uid = StringField(required=True)
-    newest_mid = StringField()
+    last_update = DateTimeField()
+    newest_mids = ListField(StringField())
     
-    statuses = ListField(EmbeddedDocumentField(MicroBlog))
     info = EmbeddedDocumentField(UserInfo)
     follows = ListField(EmbeddedDocumentField(Friend))
     fans = ListField(EmbeddedDocumentField(Friend))

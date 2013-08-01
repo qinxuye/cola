@@ -26,6 +26,7 @@ import threading
 import signal
 import random
 import socket
+import logging
 
 from cola.core.mq import MessageQueue
 from cola.core.bloomfilter import FileBloomFilter
@@ -198,7 +199,8 @@ class BasicWorkerJobLoader(JobLoader):
                 parser_cls, options = self.job.url_patterns.get_parser(url, options=True)
                 if parser_cls is not None:
                     self._require_budget()
-                    next_urls, bundles = parser_cls(opener, url, bundle=bundle, **options).parse()
+                    next_urls, bundles = parser_cls(opener, url, bundle=bundle, logger=self.logger, 
+                                                    **options).parse()
                     next_urls = list(self.job.url_patterns.matches(next_urls))
                     next_urls.extend(urls)
                     urls = next_urls
@@ -226,7 +228,7 @@ class BasicWorkerJobLoader(JobLoader):
         try:
             parser_cls, options = self.job.url_patterns.get_parser(obj, options=True)
             if parser_cls is not None:
-                next_urls = parser_cls(opener, obj, **options).parse()
+                next_urls = parser_cls(opener, obj, logger=self.logger, **options).parse()
                 next_urls = list(self.job.url_patterns.matches(next_urls))
                 
                 puts = []
@@ -324,10 +326,12 @@ class StandaloneWorkerJobLoader(LimitionJobLoader, BasicWorkerJobLoader):
                                       local=local, nodes=nodes, copies=copies, force=force)
         LimitionJobLoader.__init__(self, self.job, context=context)
         
+        log_level = logging.INFO if not job.debug else logging.DEBUG
         if self.logger is None:
             self.logger = get_logger(
                 name='cola_worker_%s'%self.job.real_name,
-                filename=os.path.join(self.root, 'job.log'))
+                filename=os.path.join(self.root, 'job.log'),
+                basic_level=log_level)
             
         self.init_rate_clear()
         
@@ -371,11 +375,13 @@ class WorkerJobLoader(BasicWorkerJobLoader):
                  context=None, logger=None, copies=1, force=False):
         super(WorkerJobLoader, self).__init__(job, data_dir, context=context, logger=logger, 
                                               local=local, nodes=nodes, copies=copies, force=force)
+        log_level = logging.INFO if not job.debug else logging.DEBUG
         if self.logger is None:
             self.logger = get_logger(
                 name='cola_worker_%s'%self.job.real_name,
                 filename=os.path.join(self.root, 'job.log'),
-                server=master.split(':')[0])
+                server=master.split(':')[0],
+                basic_level=log_level)
             
         self.master = master
         self.run_lock = threading.Lock()

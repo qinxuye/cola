@@ -33,12 +33,17 @@ class WeiboUserBundle(Bundle):
         self.last_error_page = None
         self.last_error_page_times = 0
         
+        self.weibo_user = None
+        self.last_update = None
+        self.newest_mids = []
+        self.current_mblog = None
+        
     def urls(self):
         start = int(time.time() * (10**6))
         return [
+            'http://weibo.com/%s/follow' % self.uid,
             'http://weibo.com/aj/mblog/mbloglist?uid=%s&_k=%s' % (self.uid, start),
             'http://weibo.com/%s/info' % self.uid,
-            'http://weibo.com/%s/follow' % self.uid,
             # remove because some user's link has been http://weibo.com/uid/follow?relate=fans
             # 'http://weibo.com/%s/fans' % self.uid
         ]

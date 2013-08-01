@@ -28,9 +28,10 @@ try:
 except ImportError:
     import pickle
 
-def get_logger(name='cola', filename=None, server=None, is_master=False):
+def get_logger(name='cola', filename=None, server=None, is_master=False, 
+               basic_level=logging.INFO):
     logger = logging.getLogger(name)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(basic_level)
     
     stream_handler = logging.StreamHandler()
     logger.addHandler(stream_handler)

@@ -26,14 +26,16 @@ class Test(unittest.TestCase):
         
         self.conn = Connection()
         self.db = self.conn[getattr(user_config.job, 'db')]
-        self.collection = self.db.weibo_user
+        self.users_collection = self.db.weibo_user
+        self.weibos_collection = self.db.micro_blog
         
         assert len(user_config.job['login']) > 0
         
         login_hook(self.opener, **user_config.job['login'][0])
 
     def tearDown(self):
-        self.collection.remove({'uid': self.test_uid})
+        self.users_collection.remove({'uid': self.test_uid})
+        self.weibos_collection.remove({'uid': self.test_uid})
         self.conn.close()
         
     def testMicroBlogParser(self):
@@ -48,8 +50,8 @@ class Test(unittest.TestCase):
            
         self.assertEqual(len(bundles), 0)
             
-        user = self.collection.find_one({'uid': self.test_uid})
-        self.assertEqual(len(user['statuses']), 15)
+        size = self.weibos_collection.find({'uid': self.test_uid}).count()
+        self.assertEqual(size, 15)
         
     def testMicroBlogForwardsParser(self):
         test_url = 'http://weibo.com/aj/mblog/info/big?id=3596988739933218&_t=0&__rnd=1373094212593'
@@ -60,16 +62,16 @@ class Test(unittest.TestCase):
         
         self.assertEqual(len(urls), 1)
         
-        user = self.collection.find_one({'uid': self.test_uid})
-        self.assertLessEqual(len(user['statuses'][0]['forwards']), 20)
-        self.assertGreater(len(user['statuses'][0]['forwards']), 0)
+        weibo = self.weibos_collection.find_one({'mid': '3596988739933218', 'uid': self.test_uid})
+        self.assertLessEqual(len(weibo['forwards']), 20)
+        self.assertGreater(len(weibo['forwards']), 0)
         
         parser.parse(urls[0])
-        user = self.collection.find_one({'uid': self.test_uid})
-        self.assertLessEqual(len(user['statuses'][0]['forwards']), 40)
-        self.assertGreater(len(user['statuses'][0]['forwards']), 20)
-        self.assertNotEqual(user['statuses'][0]['forwards'][0], 
-                            user['statuses'][0]['forwards'][20])
+        weibo = self.weibos_collection.find_one({'mid': '3596988739933218', 'uid': self.test_uid})
+        self.assertLessEqual(len(weibo['forwards']), 40)
+        self.assertGreater(len(weibo['forwards']), 20)
+        self.assertNotEqual(weibo['forwards'][0], 
+                            weibo['forwards'][20])
         
     def testMicroBlogForwardTimeParser(self):
         test_url = 'http://weibo.com/aj/mblog/info/big?_t=0&id=3600369441313426&__rnd=1373977781515'
@@ -78,8 +80,8 @@ class Test(unittest.TestCase):
                                           bundle=self.bundle)
         parser.parse()
         
-        user = self.collection.find_one({'uid': self.test_uid})
-        self.assertGreater(len(user['statuses'][0]['forwards']), 0)
+        weibo = self.weibos_collection.find_one({'mid': '3600369441313426', 'uid': self.test_uid})
+        self.assertGreater(len(weibo['forwards']), 0)
         
     def testMicroBlogLikesParser(self):
         test_url = 'http://weibo.com/aj/like/big?mid=3599246068109415&_t=0&__rnd=1373634556882'
@@ -90,8 +92,8 @@ class Test(unittest.TestCase):
         
         self.assertEqual(len(urls), 1)
         
-        user = self.collection.find_one({'uid': self.test_uid})
-        self.assertEqual(len(user['statuses'][0]['likes']), 30)
+        weibo = self.weibos_collection.find_one({'mid': '3599246068109415', 'uid': self.test_uid})
+        self.assertEqual(len(weibo['likes']), 30)
   
     def testUserInfoParser(self):
         test_url = 'http://weibo.com/%s/info' % self.test_uid
@@ -100,7 +102,7 @@ class Test(unittest.TestCase):
                                 bundle=self.bundle)
         parser.parse()
             
-        user = self.collection.find_one({'uid': self.test_uid})
+        user = self.users_collection.find_one({'uid': self.test_uid})
         self.assertTrue('info' in user)
          
     def testUserInfoParserForSite(self):
@@ -121,7 +123,7 @@ class Test(unittest.TestCase):
         self.assertEqual(len(urls), 1)
         self.assertGreater(bundles, 0)
           
-        user = self.collection.find_one({'uid': self.test_uid})
+        user = self.users_collection.find_one({'uid': self.test_uid})
         self.assertEqual(len(bundles), len(user['follows']))
 
 if __name__ == "__main__":

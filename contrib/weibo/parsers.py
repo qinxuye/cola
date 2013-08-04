@@ -23,7 +23,6 @@ Created on 2013-6-8
 import time
 import json
 import urllib
-import logging
 from urllib2 import URLError
 from datetime import datetime, timedelta
 from threading import Lock
@@ -84,7 +83,7 @@ class WeiboParser(Parser):
             self.bundle.last_error_page = url
             self.bundle.last_error_page_times = 0
             
-        if self.bundle.last_error_page_times >= 10:
+        if self.bundle.last_error_page_times >= 15:
             raise e
         return [url, ], []
 

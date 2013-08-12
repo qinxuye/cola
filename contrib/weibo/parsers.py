@@ -582,7 +582,10 @@ class UserFriendParser(WeiboParser):
                     query_str = urllib.urlencode(decodes)
                     url = '%s?%s' % (url.split('?')[0], query_str)
                     urls.append(url)
-        elif is_follow is True:
+                    
+                    return urls, bundles
+        
+        if is_follow is True:
             if is_new_mode:
                 urls.append('http://weibo.com/%s/follow?relate=fans' % self.uid)
             else:

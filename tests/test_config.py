@@ -18,8 +18,9 @@ Created on 2013-5-21
 @author: Chine
 '''
 import unittest
+import pickle
 
-from cola.core.config import PropertyObject
+from cola.core.config import PropertyObject, main_conf
 
 class Test(unittest.TestCase):
 
@@ -40,7 +41,11 @@ class Test(unittest.TestCase):
         assert self.obj.name == 'cola'
         assert isinstance(self.obj.list, list)
         assert self.obj.list[0].count == 1
-
+        
+    def testPickle(self):
+        c = pickle.dumps(main_conf)
+        new_conf = pickle.loads(c)
+        self.assertEqual(new_conf.master.port, 11103)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

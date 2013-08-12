@@ -29,17 +29,30 @@ try:
 except ImportError:
     raise DependencyNotInstalledError('pyyaml')
 
-class PropertyObject(dict): 
-    def __getattr__(self, name):
-        if name not in self:
-            return
-        attr = self[name]
-        if isinstance(attr, dict):
-            return PropertyObject(attr)
-        elif isinstance(attr, list):
-            return [PropertyObject(itm) for itm in attr]
-        else:
-            return attr
+class PropertyObject(dict):
+    def __init__(self, d):
+        super(PropertyObject, self).__init__()
+        self._update(d)
+        
+    def _update(self, d):
+        for k, v in d.iteritems():
+            if not k.startswith('_'):
+                self[k] = v
+                
+                if isinstance(v, dict):
+                    setattr(self, k, PropertyObject(v))
+                elif isinstance(v, list):
+                    setattr(self, k, [PropertyObject(itm) for itm in v])
+                else:
+                    setattr(self, k, v)
+                    
+    def update(self, config=None, **kwargs):
+        self._update(kwargs)
+        if config is not None:
+            if isinstance(config, dict):
+                self._update(config)
+            else:
+                self._update(config.conf)
 
 class Config(object):
     def __init__(self, yaml_file):
@@ -52,11 +65,14 @@ class Config(object):
         finally:
             f.close()
             
-    def __getattr__(self, name):
-        return getattr(self.conf, name)
+        for k, v in self.conf.iteritems():
+            if not k.startswith('_'):
+                if isinstance(v, dict):
+                    v = PropertyObject(v)
+                setattr(self, k, v)
     
     def __getitem__(self, name):
-        return getattr(self.conf, name)
+        return getattr(self, name)
     
 conf_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'conf')

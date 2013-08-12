@@ -27,24 +27,26 @@ try:
     import cPickle as pickle
 except ImportError:
     import pickle
-
-def get_logger(name='cola', filename=None, server=None, is_master=False, 
-               basic_level=logging.INFO):
-    logger = logging.getLogger(name)
-    logger.setLevel(basic_level)
     
-    stream_handler = logging.StreamHandler()
-    logger.addHandler(stream_handler)
-    
-    if filename is not None:
+class Log(object):
+    def __init__(self, name, default_level=logging.DEBUG):
+        self.logger = logging.getLogger(name)
+        self.logger.setLevel(default_level)
+        self.formatter = logging.Formatter(
+            '%(asctime)s - %(module)s.%(funcName)s.%(lineno)d - %(levelname)s - %(message)s')
+        
+    def add_stream_log(self, level=logging.DEBUG):
+        stream_handler = logging.StreamHandler()
+        stream_handler.setLevel(level)
+        self.logger.addHandler(stream_handler)
+        
+    def add_file_log(self, filename, level=logging.INFO):
         handler = logging.FileHandler(filename)
-        formatter = logging.Formatter('%(asctime)s - %(module)s.%(funcName)s.%(lineno)d - %(levelname)s - %(message)s')
-        handler.setFormatter(formatter)
-        if is_master:
-            handler.setLevel(logging.ERROR)
-        logger.addHandler(handler)
-    
-    if server is not None:
+        handler.setFormatter(self.formatter)
+        handler.setLevel(level)
+        self.logger.addHandler(handler)
+        
+    def add_remote_log(self, server, level=logging.INFO):
         if ':' in server:
             server, port = tuple(server.split(':', 1))
             port = int(port)
@@ -52,10 +54,27 @@ def get_logger(name='cola', filename=None, server=None, is_master=False,
             port = logging.handlers.DEFAULT_TCP_LOGGING_PORT
             
         socket_handler = logging.handlers.SocketHandler(server, port)
-        socket_handler.setLevel(logging.INFO)
-        logger.addHandler(socket_handler)
+        socket_handler.setLevel(level)
+        self.logger.addHandler(socket_handler)
         
-    return logger
+    def get_logger(self):
+        return self.logger
+
+def get_logger(name='cola', filename=None, server=None, is_master=False, 
+               basic_level=logging.INFO):
+    log = Log(name, basic_level)
+    log.add_stream_log(basic_level)
+    
+    if filename is not None:
+        level = basic_level
+        if is_master:
+            level = logging.ERROR
+        log.add_file_log(filename, level)
+    
+    if server is not None:
+        log.add_remote_log(server, logging.INFO)
+        
+    return log.get_logger()
 
 def add_log_client(logger, client):
     if ':' in client:

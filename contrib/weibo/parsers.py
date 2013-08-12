@@ -344,21 +344,11 @@ class ForwardCommentLikeParser(WeiboParser):
             return [], []
         
         params = urldecode(url)
-        next_page = soup.find('a', attrs={'class': 'btn_page_next'})
-        if next_page is not None:
-            self.bundle.current_mblog = mblog
-            
-            try:
-                next_page_str = next_page['action-data']
-            except KeyError:
-                next_page_str = next_page.find('span')['action-data']
-            new_params = urldecode('?%s'%next_page_str)
-            params.update(new_params)
-            params['__rnd'] = int(time.time()*1000)
-            next_page = '%s?%s' % (url.split('?')[0] , urllib.urlencode(params))
-            return [next_page, ], []
-    
-        return [], []
+        new_params = urldecode('?%s'%(current_page+1))
+        params.update(new_params)
+        params['__rnd'] = int(time.time()*1000)
+        next_page = '%s?%s' % (url.split('?')[0] , urllib.urlencode(params))
+        return [next_page, ], []
     
 class UserInfoParser(WeiboParser):
     def parse(self, url=None):
@@ -516,6 +506,7 @@ class UserFriendParser(WeiboParser):
         weibo_user = self.get_weibo_user()
         
         html = None
+        decodes = urldecode(url)
         is_follow = True
         is_new_mode = False
         for script in soup.find_all('script'):
@@ -530,7 +521,6 @@ class UserFriendParser(WeiboParser):
                 domid = data['domid']
                 if domid == 'Pl_Official_LeftHisRelation__15':
                     html = beautiful_soup(data['html'])
-                decodes = urldecode(url)
                 if 'relate' in decodes and decodes['relate'] == 'fans':
                     is_follow = False
                 is_new_mode = True
@@ -558,10 +548,12 @@ class UserFriendParser(WeiboParser):
                     urls.append('http://weibo.com/%s/fans' % self.uid)
             return urls, bundles
         
-        if is_follow:
-            weibo_user.follows = []
-        else:
-            weibo_user.fans = []
+        current_page = decodes.get('page', 1)
+        if current_page == 1:
+            if is_follow:
+                weibo_user.follows = []
+            else:
+                weibo_user.fans = []
         for li in ul.find_all(attrs={'class': 'S_line1', 'action-type': 'itemClick'}):
             data = dict([l.split('=') for l in li['action-data'].split('&')])
             
@@ -586,7 +578,6 @@ class UserFriendParser(WeiboParser):
             if len(a) > 0:
                 next_ = a[-1]
                 if next_['class'] == ['W_btn_c']:
-                    decodes = urldecode(url)
                     decodes['page'] = int(decodes.get('page', 1)) + 1
                     query_str = urllib.urlencode(decodes)
                     url = '%s?%s' % (url.split('?')[0], query_str)

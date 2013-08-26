@@ -399,7 +399,7 @@ class WorkerJobLoader(BasicWorkerJobLoader):
         client_call(self.master, 'error', obj)
         
     def _require_budget(self):
-        if self.ctx.job.limits == 0 or self.stopped:
+        if self.ctx.job.limit == 0 or self.stopped:
             return
         
         if self.budget > 0:

@@ -20,6 +20,7 @@ Created on 2013-5-31
 @author: Chine
 '''
 
+import socket
 import logging.handlers
 import SocketServer
 import struct
@@ -91,17 +92,21 @@ def add_log_client(logger, client):
 
 class LogRecordStreamHandler(SocketServer.StreamRequestHandler):
     def handle(self):
+        self.connection.setblocking(0)
         while not self.server.abort:
-            chunk = self.connection.recv(4)
-            if len(chunk) < 4:
-                break
-            slen = struct.unpack('>L', chunk)[0]
-            chunk = self.connection.recv(slen)
-            while len(chunk) < slen:
-                chunk = chunk + self.connection.recv(slen - len(chunk))
-            obj = self.unPickle(chunk)
-            record = logging.makeLogRecord(obj)
-            self.handleLogRecord(record)
+            try:
+                chunk = self.connection.recv(4)
+                if len(chunk) < 4:
+                    break
+                slen = struct.unpack('>L', chunk)[0]
+                chunk = self.connection.recv(slen)
+                while len(chunk) < slen:
+                    chunk = chunk + self.connection.recv(slen - len(chunk))
+                obj = self.unPickle(chunk)
+                record = logging.makeLogRecord(obj)
+                self.handleLogRecord(record)
+            except socket.error:
+                return
             
     def unPickle(self, data):
         return pickle.loads(data)

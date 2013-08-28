@@ -76,7 +76,6 @@ def stop_log_server():
         return
     
     log_server.shutdown()
-    log_server.stop()
     log_server = None
     
 rpc_server = None

@@ -130,5 +130,6 @@ class LogRecordSocketReceiver(SocketServer.ThreadingTCPServer):
         self.timeout = 1
         self.logger = logger
         
-    def stop(self):
+    def shutdown(self):
+        SocketServer.ThreadingTCPServer.shutdown(self)
         self.abort = True

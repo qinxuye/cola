@@ -34,7 +34,6 @@ class Test(unittest.TestCase):
 
     def tearDown(self):
         self.log_server.shutdown()
-        self.log_server.stop()
 
     def testLog(self):
         self.client_logger.error('Sth happens here')

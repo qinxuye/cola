@@ -107,7 +107,6 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
     def stop_logger_server(self):
         if hasattr(self, 'log_server'):
             self.log_server.shutdown()
-            self.log_server.stop()
             
     def client_stop(self):
         if self.client_handler is not None:

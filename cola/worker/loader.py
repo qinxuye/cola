@@ -166,10 +166,13 @@ class BasicWorkerJobLoader(JobLoader):
                 not isinstance(self.ctx.job.login, list):
                 raise ConfigurationError('If login_hook set, config files must contains `login`')
             kw = random.choice(self.ctx.job.login)
-            login_success = self.job.login_hook(opener, **kw)
-            if not login_success:
-                self.logger.info('login fail')
-            return login_success
+            login_result = self.job.login_hook(opener, **kw)
+            if isinstance(login_result, tuple) and len(login_result) == 2:
+                self.logger.error('login fail, reason: %s' % login_result[1])
+                return login_result[0]
+            elif not login_result:
+                self.logger.error('login fail')
+            return login_result
         return True
         
     def _log_error(self, obj, err):

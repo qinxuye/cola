@@ -98,7 +98,9 @@ class WeiboLogin(object):
             
             regex = re.compile('\((.*)\)')
             json_data = json.loads(regex.search(text).group(1))
-            return json_data['result'] == True
-            
+            result = json_data['result'] == True
+            if result is False and 'reason' in json_data:
+                return result, json_data['reason']
+            return result
         except WeiboLoginFailure:
             return False

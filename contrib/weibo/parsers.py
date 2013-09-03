@@ -344,7 +344,7 @@ class ForwardCommentLikeParser(WeiboParser):
             return [], []
         
         params = urldecode(url)
-        new_params = urldecode('?%s'%(current_page+1))
+        new_params = urldecode('?page=%s'%(current_page+1))
         params.update(new_params)
         params['__rnd'] = int(time.time()*1000)
         next_page = '%s?%s' % (url.split('?')[0] , urllib.urlencode(params))
@@ -519,7 +519,7 @@ class UserFriendParser(WeiboParser):
                 except ValueError, e:
                     return self._error(url, e)
                 domid = data['domid']
-                if domid == 'Pl_Official_LeftHisRelation__15':
+                if domid == 'Pl_Official_LeftHisRelation__16':
                     html = beautiful_soup(data['html'])
                 if 'relate' in decodes and decodes['relate'] == 'fans':
                     is_follow = False

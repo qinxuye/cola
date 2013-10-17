@@ -511,7 +511,7 @@ class UserFriendParser(WeiboParser):
         is_new_mode = False
         for script in soup.find_all('script'):
             text = script.text
-            if 'FM.view' in text:
+            if text.startswith('FM.view'):
                 text = text.strip().replace(';', '').replace('FM.view(', '')[:-1]
                 data = None
                 try:

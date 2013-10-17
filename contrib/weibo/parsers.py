@@ -374,8 +374,8 @@ class UserInfoParser(WeiboParser):
         tags_div = None
         for script in soup.find_all('script'):
             text = script.text
-            if 'FM.view' in text:
-                text = text.replace('FM.view(', '')[:-1]
+            if text.startswith('FM.view'):
+                text = text.strip().replace(';', '').replace('FM.view(', '')[:-1]
                 data = json.loads(text)
                 domid = data['domid']
                 if domid == 'Pl_Official_LeftInfo__13':
@@ -512,7 +512,7 @@ class UserFriendParser(WeiboParser):
         for script in soup.find_all('script'):
             text = script.text
             if 'FM.view' in text:
-                text = text.replace('FM.view(', '')[:-1]
+                text = text.strip().replace(';', '').replace('FM.view(', '')[:-1]
                 data = None
                 try:
                     data = json.loads(text)

@@ -51,7 +51,7 @@ class Test(unittest.TestCase):
         self.assertEqual(len(bundles), 0)
             
         size = self.weibos_collection.find({'uid': self.test_uid}).count()
-        self.assertEqual(size, 15)
+        self.assertAlmostEqual(size, 15, delta=1)
         
     def testMicroBlogForwardsParser(self):
         test_url = 'http://weibo.com/aj/mblog/info/big?id=3596988739933218&_t=0&__rnd=1373094212593'

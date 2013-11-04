@@ -305,7 +305,7 @@ class ForwardCommentLikeParser(WeiboParser):
         
         def set_instance(instance, dl):
             instance.avatar = dl.find('dt').find('img')['src']
-            date = dl.find('dd').find('span', attrs={'class': 'S_txt2'}).text
+            date = dl.find('dd').find(attrs={'class': 'S_txt2'}).text
             date = date.strip().strip('(').strip(')')
             instance.created = self.parse_datetime(date)
             for div in dl.find_all('div'): div.extract()
@@ -519,7 +519,7 @@ class UserFriendParser(WeiboParser):
                 except ValueError, e:
                     return self._error(url, e)
                 domid = data['domid']
-                if domid == 'Pl_Official_LeftHisRelation__16':
+                if domid.startswith('Pl_Official_LeftHisRelation__'):
                     html = beautiful_soup(data['html'])
                 if 'relate' in decodes and decodes['relate'] == 'fans':
                     is_follow = False

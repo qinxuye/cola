@@ -27,16 +27,9 @@ from cola.core.rpc import client_call
 from cola.core.utils import get_ip
 from cola.core.config import Config
 from cola.core.logs import get_logger
+from cola.worker.recover import recover
 
 logger = get_logger(name='generic_stop')
-
-def _client_call(*args):
-    try:
-        return client_call(*args)
-    except socket.error:
-        logger.error('Cannot connect to single running worker.')
-    except:
-        pass
 
 get_user_conf = lambda s: os.path.join(os.path.dirname(os.path.abspath(__file__)), s)
 user_conf = get_user_conf('test.yaml')
@@ -47,5 +40,13 @@ user_config = Config(user_conf)
 if __name__ == '__main__':
     ip, port = get_ip(), getattr(user_config.job, 'port')
     logger.info('Trying to stop single running worker')
-    _client_call('%s:%s' % (ip, port), 'stop')
+    try:
+        client_call('%s:%s' % (ip, port), 'stop')
+    except socket.error:
+        stop = raw_input("Force to stop? (y or n) ").strip()
+        if stop == 'y' or stop == 'yes':
+            job_path = os.path.split(os.path.abspath(__file__))[0]
+            recover()
+        else:
+            print 'ignore'
     logger.info('Successfully stopped single running worker')

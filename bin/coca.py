@@ -218,6 +218,16 @@ def stopRunningJobByName(master, job_name):
         logger.info('Job with name(%s) is shutting down, '
                     'and it will take a few seconds to complete.')
         
+@register
+def showVisitedPages(master):
+    '''
+    show all visited pages' size
+    '''
+    
+    logger.info('Querying the cola cluster...')
+    
+    print 'All vistied page size\' size: %s' % _client_call(master, 'pages')
+        
 if __name__ == "__main__":
     parser.add_argument('-m', '--master', metavar='master watcher', nargs='?',
                         default=None, const=None,

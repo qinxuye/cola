@@ -95,6 +95,7 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
         self.rpc_server.register_function(self.stop, 'stop')
         self.rpc_server.register_function(self.add_node, 'add_node')
         self.rpc_server.register_function(self.remove_node, 'remove_node')
+        self.rpc_server.register_function(self.pages, 'pages')
         
         # register signal
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -124,6 +125,8 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
             pass
         
     def finish(self):
+        all_pages = self.pages()
+        
         self.release_lock(self.ready_lock)
         self.release_lock(self.finish_lock)
         
@@ -144,6 +147,7 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
             )
             client_call(rpc_client, 'stop', ignore=True)
             
+        self.logger.info('All nodes finishes visiting pages size: %s' % all_pages)
         self.stopped = True
         
     def stop(self):
@@ -180,6 +184,14 @@ class MasterJobLoader(LimitionJobLoader, JobLoader):
             client_call(node, 'remove_node', node, ignore=True)
         if node in self.nodes:
             self.nodes.remove(node)
+            
+    def pages(self):
+        all_pages = 0
+        for node in self.nodes:
+            pages = client_call(node, 'pages', ignore=True)
+            if pages is not None:
+                all_pages += int(pages)
+        return all_pages
         
     def run(self):
         self.ready_lock.acquire()

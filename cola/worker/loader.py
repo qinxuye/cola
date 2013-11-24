@@ -80,6 +80,9 @@ class BasicWorkerJobLoader(JobLoader):
         # budget
         self.budget = 0
         
+        # counter
+        self.pages_size = 0
+        
         # lock when not stopped
         self.stop_lock = threading.Lock()
         self.stop_lock.acquire()
@@ -98,6 +101,7 @@ class BasicWorkerJobLoader(JobLoader):
         self.rpc_server.register_function(self.add_node, name='add_node')
         self.rpc_server.register_function(self.remove_node, name='remove_node')
         self.rpc_server.register_function(self.run, name='run')
+        self.rpc_server.register_function(self.pages, name='pages')
             
     def _init_bloom_filter(self):
         size = self.job.context.job.size
@@ -141,6 +145,8 @@ class BasicWorkerJobLoader(JobLoader):
             raise JobWorkerRunning('There has been a running job worker.')
         
     def finish(self):
+        if self.logger is not None:
+            self.logger.info('Finish visiting pages count: %s' % self.pages_size)
         self.stopped = True
         self.mq.shutdown()
         try:
@@ -164,9 +170,11 @@ class BasicWorkerJobLoader(JobLoader):
             self.executings.remove(obj)
         
     def stop(self):
-        self.mq.put(self.executings, force=True)
-        self._release_stop_lock()
-        super(BasicWorkerJobLoader, self).stop()
+        try:
+            self.mq.put(self.executings, force=True)
+            super(BasicWorkerJobLoader, self).stop()
+        finally:
+            self._release_stop_lock()
         
     def signal_handler(self, signum, frame):
         self.stop()
@@ -197,6 +205,9 @@ class BasicWorkerJobLoader(JobLoader):
     def _require_budget(self, count):
         raise NotImplementedError
     
+    def pages(self):
+        return self.pages_size
+    
     def apply(self):
         raise NotImplementedError
     
@@ -213,6 +224,7 @@ class BasicWorkerJobLoader(JobLoader):
                 parser_cls, options = self.job.url_patterns.get_parser(url, options=True)
                 if parser_cls is not None:
                     self._require_budget()
+                    self.pages_size += 1
                     next_urls, bundles = parser_cls(opener, url, bundle=bundle, logger=self.logger, 
                                                     **options).parse()
                     next_urls = list(self.job.url_patterns.matches(next_urls))
@@ -242,6 +254,7 @@ class BasicWorkerJobLoader(JobLoader):
         try:
             parser_cls, options = self.job.url_patterns.get_parser(obj, options=True)
             if parser_cls is not None:
+                self.pages_size += 1
                 next_urls = parser_cls(opener, obj, logger=self.logger, **options).parse()
                 next_urls = list(self.job.url_patterns.matches(next_urls))
                 

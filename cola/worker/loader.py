@@ -80,6 +80,10 @@ class BasicWorkerJobLoader(JobLoader):
         # budget
         self.budget = 0
         
+        # lock when not stopped
+        self.stop_lock = threading.Lock()
+        self.stop_lock.acquire()
+        
         self.check()
         # init rpc server
         self.init_rpc_server()
@@ -124,6 +128,12 @@ class BasicWorkerJobLoader(JobLoader):
             copies=self.copies)
         self.mq.init_store(mq_store_dir, mq_backup_dir, 
                            verify_exists_hook=self._init_bloom_filter())
+    
+    def _release_stop_lock(self):
+        try:
+            self.stop_lock.release()
+        except:
+            pass
         
     def check(self):
         env_legal = self.check_env(force=self.force)
@@ -155,6 +165,7 @@ class BasicWorkerJobLoader(JobLoader):
         
     def stop(self):
         self.mq.put(self.executings, force=True)
+        self._release_stop_lock()
         super(BasicWorkerJobLoader, self).stop()
         
     def signal_handler(self, signum, frame):
@@ -283,7 +294,7 @@ class BasicWorkerJobLoader(JobLoader):
         if self.mq is not None:
             self.mq.add_node(node)
             
-    def _run(self):
+    def _run(self, stop_when_finish=False):
         def _call(opener=None):
             if opener is None:
                 opener = self.job.opener_cls()
@@ -306,6 +317,8 @@ class BasicWorkerJobLoader(JobLoader):
                 
         try:
             threads = [threading.Thread(target=_call) for _ in range(self.instances)]
+            if not stop_when_finish:
+                threads.append(threading.Thread(target=self.stop_lock.acquire))
             for t in threads:
                 t.start()
             for t in threads:
@@ -341,7 +354,7 @@ class StandaloneWorkerJobLoader(LimitionJobLoader, BasicWorkerJobLoader):
     def finish(self):
         LimitionJobLoader.finish(self)
         BasicWorkerJobLoader.finish(self)
-        
+                    
     def stop(self):
         LimitionJobLoader.stop(self)
         BasicWorkerJobLoader.stop(self)
@@ -371,7 +384,7 @@ class StandaloneWorkerJobLoader(LimitionJobLoader, BasicWorkerJobLoader):
     def run(self, put_starts=True):
         if put_starts:
             self.mq.put(self.job.starts)
-        self._run()
+        self._run(stop_when_finish=True)
         
 class WorkerJobLoader(BasicWorkerJobLoader):
     def __init__(self, job, data_dir, master, local=None, nodes=None, 

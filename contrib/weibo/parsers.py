@@ -44,11 +44,14 @@ try:
 except ImportError:
     raise DependencyNotInstalledError('python-dateutil')
 
+TIMEOUT = 30.0
+
 class WeiboParser(Parser):
     def __init__(self, opener=None, url=None, bundle=None, **kwargs):
         super(WeiboParser, self).__init__(opener=opener, url=url, **kwargs)
         self.bundle = bundle
         self.uid = bundle.label
+        self.opener.set_default_timeout(TIMEOUT)
         if not hasattr(self, 'logger') or self.logger is None:
             self.logger = get_logger(name='weibo_parser')
     

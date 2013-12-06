@@ -77,6 +77,12 @@ class MicroBlog(Document):
     n_comments = IntField()
     comments = ListField(EmbeddedDocumentField(Comment))
     
+    meta = {
+        'indexes': [
+            {'fields': ['mid', 'uid']}
+        ]
+    }
+    
 class EduInfo(EmbeddedDocument):
     name = StringField()
     date = StringField()

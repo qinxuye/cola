@@ -55,7 +55,7 @@ class BuiltinOpener(Opener):
         
     
 class MechanizeOpener(Opener):
-    def __init__(self, cookie_filename=None, user_agent=None):
+    def __init__(self, cookie_filename=None, user_agent=None, timeout=None):
         try:
             import mechanize
         except ImportError:
@@ -78,14 +78,26 @@ class MechanizeOpener(Opener):
         self.browser.addheaders = [
             ('User-agent', user_agent)]
         
-    def open(self, url, data=None):
+        if timeout is None:
+            self._default_timout = mechanize._sockettimeout._GLOBAL_DEFAULT_TIMEOUT
+        else:
+            self._default_timout = timeout
+            
+    def set_default_timeout(self, timeout):
+        self._default_timout = timeout
+        
+    def open(self, url, data=None, timeout=None):
         # check if gzip by
         # br.response().info().dict.get('content-encoding') == 'gzip'
         # experimently add `self.br.set_handle_gzip(True)` to handle
-        return self.browser.open(url, data=data).read()
+        if timeout is None:
+            timeout = self._default_timout
+        return self.browser.open(url, data=data, timeout=timeout).read()
     
-    def browse_open(self, url, data=None):
-        self.browser.open(url, data=data)
+    def browse_open(self, url, data=None, timeout=None):
+        if timeout is None:
+            timeout = self._default_timout
+        self.browser.open(url, data=data, timeout=timeout)
         return self.browser
     
     def close(self):

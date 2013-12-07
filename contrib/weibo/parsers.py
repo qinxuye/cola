@@ -232,7 +232,7 @@ class MicroBlogParser(WeiboParser):
         if len(divs) == 0 or finished:
             weibo_user = self.get_weibo_user()
             for mid in self.bundle.newest_mids:
-                if mid not in self.bundle.newest_mids:
+                if mid not in weibo_user.newest_mids:
                     weibo_user.newest_mids.append(mid)
             while len(weibo_user.newest_mids) > 3:
                 weibo_user.newest_mids.pop()

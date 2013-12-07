@@ -209,10 +209,10 @@ class MicroBlogParser(WeiboParser):
                 query = {'id': mid, '_t': 0, '__rnd': int(time.time()*1000)}
                 query_str = urllib.urlencode(query)
                 if fetch_forward and mblog.n_forwards > 0:
-                    forward_url = 'http://weibo.com/aj/comment/big?%s' % query_str
+                    forward_url = 'http://weibo.com/aj/mblog/info/big?%s' % query_str
                     next_urls.append(forward_url)
                 if fetch_comment and mblog.n_comments > 0:
-                    comment_url = 'http://weibo.com/aj/mblog/info/big?%s' % query_str
+                    comment_url = 'http://weibo.com/aj/comment/big?%s' % query_str
                     next_urls.append(comment_url)
                 if fetch_like and mblog.n_likes > 0:
                     query = {'mid': mid, '_t': 0, '__rnd': int(time.time()*1000)}

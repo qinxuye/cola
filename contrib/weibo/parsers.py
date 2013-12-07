@@ -381,7 +381,7 @@ class UserInfoParser(WeiboParser):
                 text = text.strip().replace(';', '').replace('FM.view(', '')[:-1]
                 data = json.loads(text)
                 domid = data['domid']
-                if domid == 'Pl_Official_LeftInfo__13':
+                if domid.startswith('Pl_Official_LeftInfo__'):
                     info_soup = beautiful_soup(data['html'])
                     info_div = info_soup.find('div', attrs={'class': 'profile_pinfo'})
                     for block_div in info_div.find_all('div', attrs={'class': 'infoblock'}):

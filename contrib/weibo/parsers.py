@@ -541,6 +541,8 @@ class UserFriendParser(WeiboParser):
         try:
             ul = html.find(attrs={'class': 'cnfList', 'node-type': 'userListBox'})
         except AttributeError, e:
+            if br.geturl().startswith('http://e.weibo.com'):
+                return [], []
             return self._error(url, e)
         if ul is None:
             urls = []

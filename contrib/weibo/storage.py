@@ -66,6 +66,7 @@ class MicroBlog(Document):
     mid = StringField(required=True)
     uid = StringField(required=True)
     content = StringField()
+    omid = StringField()
     forward = StringField()
     created = DateTimeField()
     geo = EmbeddedDocumentField(Geo)

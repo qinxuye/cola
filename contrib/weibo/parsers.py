@@ -158,6 +158,7 @@ class MicroBlogParser(WeiboParser):
             mblog.content = content_div.text
             is_forward = div.get('isforward') == '1'
             if is_forward:
+                mblog.omid = div['omid']
                 name_a = div.find('a', attrs={
                     'class': 'WB_name', 
                     'node-type': 'feed_list_originNick'

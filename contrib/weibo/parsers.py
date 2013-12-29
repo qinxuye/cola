@@ -23,6 +23,7 @@ Created on 2013-6-8
 import time
 import json
 import urllib
+import re
 from urllib2 import URLError
 from datetime import datetime, timedelta
 from threading import Lock
@@ -180,17 +181,20 @@ class MicroBlogParser(WeiboParser):
                 mblog.created <= weibo_user.last_update:
                 finished = True
                 break
+
+            func_div = div.find_all('div', 'WB_func')[-1]
+            action_type_re = lambda t: re.compile("^(feed_list|fl)_%s$" % t)
             
-            likes = div.find('a', attrs={'action-type': 'feed_list_like'}).text
+            likes = func_div.find('a', attrs={'action-type': action_type_re("like")}).text
             likes = likes.strip('(').strip(')')
             likes = 0 if len(likes) == 0 else int(likes)
             mblog.n_likes = likes
-            forwards = div.find('a', attrs={'action-type': 'feed_list_forward'}).text
+            forwards = func_div.find('a', attrs={'action-type': action_type_re("forward")}).text
             if '(' not in forwards:
                 mblog.n_forwards = 0
             else:
                 mblog.n_forwards = int(forwards.strip().split('(', 1)[1].strip(')'))
-            comments = div.find('a', attrs={'action-type': 'feed_list_comment'}).text
+            comments = func_div.find('a', attrs={'action-type': action_type_re('comment')}).text
             if '(' not in comments:
                 mblog.n_comments = 0
             else:
@@ -319,14 +323,17 @@ class ForwardCommentLikeParser(WeiboParser):
         if url.startswith('http://weibo.com/aj/comment'):
             dls = soup.find_all('dl', mid=True)
             for dl in dls:
-                comment = Comment(uid=self.uid)
+                uid = dl.find('a', usercard=True)['usercard'].split("id=", 1)[1]
+                comment = Comment(uid=uid)
                 set_instance(comment, dl)
                 
                 mblog.comments.append(comment)
         elif url.startswith('http://weibo.com/aj/mblog/info'):
             dls = soup.find_all('dl', mid=True)
             for dl in dls:
-                forward = Forward(uid=self.uid, mid=dl['mid'])
+                forward_again_a = dl.find('a', attrs={'action-type': re.compile("^(feed_list|fl)_forward$")})
+                uid = urldecode('?%s' % forward_again_a['action-data'])['uid']
+                forward = Forward(uid=uid, mid=dl['mid'])
                 set_instance(forward, dl)
                 
                 mblog.forwards.append(forward)

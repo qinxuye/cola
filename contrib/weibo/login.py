@@ -95,6 +95,11 @@ class WeiboLogin(object):
             }
             postdata = urllib.urlencode(postdata)
             text = self.opener.open(login_url, postdata)
+
+            # Fix for new login changed since about 2014-3-28
+            ajax_url_regex = re.compile('location\.replace\(\'(.*)\'\)')
+            ajax_url = ajax_url_regex.search(text).group(1)
+            text = self.opener.open(ajax_url)
             
             regex = re.compile('\((.*)\)')
             json_data = json.loads(regex.search(text).group(1))

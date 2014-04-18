@@ -21,9 +21,11 @@ Created on 2013-5-23
 '''
 
 import os
+import re
 import threading
 import mmap
-import platform
+import sys
+from collections import defaultdict
 
 class NodeExistsError(Exception): pass
 
@@ -32,46 +34,42 @@ class NodeNotSafetyShutdown(Exception): pass
 class NodeNoSpaceForPut(Exception): pass
 
 NODE_FILE_SIZE = 4 * 1024 * 1024 # single node store file must be less than 4M.
+LEGAL_NODE_FILE_REGEX = re.compile("^\d+$")
+
+READ_ENTRANCE, WRITE_ENTRANCE = range(2)
 
 class Node(object):
-    def __init__(self, dir_, size=NODE_FILE_SIZE, verify_exists_hook=None):
+    def __init__(self, working_dir, size=NODE_FILE_SIZE, verify_exists_hook=None):
         self.lock = threading.Lock()
-        self.NODE_FILE_SIZE = size
+        self.node_file_size = size
         self.verify_exists_hook = verify_exists_hook
         
-        self.dir_ = dir_
-        self.lock_file = os.path.join(dir_, 'lock')
+        self.dir_ = working_dir
+        self.lock_file = os.path.join(self.dir_, 'lock')
         with self.lock:
             if os.path.exists(self.lock_file):
                 raise NodeExistsError('Directory is being used by another node.')
             else:
                 open(self.lock_file, 'w').close()
-            
-        self.old_files = []
-        self.map_files = []
-        self.file_handles = {}
-        self.map_handles = {}
+
         self.stopped = False
-        self.check()
-        self.map()
+        self.inited = False
+
+        self.legal_files = []
+        self.file_handles = defaultdict(lambda: None)
+        self.map_handles = defaultdict(lambda: None)
             
     def shutdown(self):
         if self.stopped: return
         self.stopped = True
         
         try:
-            self.merge()
-            
             for handle in self.map_handles.values():
-                handle.close()
+                if handle is not None:
+                    handle.close()
             for handle in self.file_handles.values():
-                handle.close()
-                
-            # Move a store to an old one.
-            for f in self.old_files:
-                os.remove(f)
-            for f in self.map_files:
-                os.rename(f, f + '.old')
+                if handle is not None:
+                    handle.close()
                 
             if self.verify_exists_hook is not None:
                 self.verify_exists_hook.sync()
@@ -79,177 +77,154 @@ class Node(object):
         finally:
             with self.lock:
                 os.remove(self.lock_file)
+                
+        self.inited = False
         
-    def check(self):
+    def init(self):
+        if self.inited: return
+        
         files = os.listdir(self.dir_)
         for fi in files:
             if fi == 'lock': continue
             
             file_path = os.path.join(self.dir_, fi)
             if not os.path.isfile(file_path) or \
-                not fi.endswith('.old'):
+                LEGAL_NODE_FILE_REGEX.match(fi) is None:
                 raise NodeNotSafetyShutdown('Node did not shutdown safety last time.')
             else:
-                self.old_files.append(file_path)
+                self.legal_files.append(file_path)
                 
-        self.old_files = sorted(self.old_files, key=lambda k: int(os.path.split(k)[1].rsplit('.', 1)[0]))
-        self.map_files = [f.rsplit('.', 1)[0] for f in self.old_files]
+        self.legal_files = sorted(self.legal_files, key=lambda k: int(os.path.basename(k)))
         
-    def map(self):
-        for (old, new) in zip(self.old_files, self.map_files):
-            with open(old) as old_fp:
-                fp = open(new, 'w+')
-                self.file_handles[new] = fp
-                content = old_fp.read()
-                fp.write(content)
-                fp.flush()
+        if len(self.legal_files) > 0:
+            read_file_handle = self.file_handles[READ_ENTRANCE] \
+                = open(self.legal_files[-1], 'r+')
+            self.map_handles[READ_ENTRANCE] = mmap.mmap(read_file_handle.fileno(), 
+                                                        self.node_file_size)
+            if len(self.legal_files) == 1:
+                self.file_handles[WRITE_ENTRANCE] = self.file_handles[READ_ENTRANCE]
+                self.map_handles[WRITE_ENTRANCE] = self.map_handles[READ_ENTRANCE]
+            else:
+                write_file_handle = self.file_handles[WRITE_ENTRANCE] \
+                    = open(self.legal_files[0], 'r+')
+                self.map_handles[WRITE_ENTRANCE] = mmap.mmap(write_file_handle.fileno(),
+                                                             self.node_file_size)
                 
-                if len(content) > 0:
-                    m = mmap.mmap(fp.fileno(), self.NODE_FILE_SIZE)
-                    self.map_handles[new] = m
-                    
-        if len(self.map_files) == 0:
-            path = os.path.join(self.dir_, '1')
-            self.map_files.append(path)
-            self.file_handles[path] = open(path, 'w+')
-            
-    def _write_obj(self, fp, obj):
-        if platform.system() == "Windows":
-            fp.write(obj)
-        else:
-            length = len(obj)
-            rest_length = self.NODE_FILE_SIZE - length
-            fp.write(obj + '\x00' * rest_length)
-            
-        fp.flush()
+        self.inited = True
+    
+    def _generate_file(self):
+        prev = None
+        if len(self.legal_files) > 0:
+            fn = os.path.basename(self.legal_files[0])
+            prev = int(LEGAL_NODE_FILE_REGEX.match(fn).group())
+        current = str(prev-1 if prev is not None else sys.maxint)
+        file_path = os.path.join(self.dir_, current)
+        if len(self.legal_files) > 1:
+            self.map_handles[WRITE_ENTRANCE].close()
+            self.file_handles[WRITE_ENTRANCE].close()
+        self.legal_files.insert(0, file_path)
+        open(file_path, 'w').close()
+        write_file_handle = self.file_handles[WRITE_ENTRANCE] = open(file_path, 'r+')
+        write_file_handle.write('\x00'*self.node_file_size)
+        write_file_handle.flush()
+        self.map_handles[WRITE_ENTRANCE] = mmap.mmap(write_file_handle.fileno(),
+                                                     self.node_file_size)
         
-    def _get_obj(self, obj, force=False):
-        if isinstance(obj, (tuple, list)):
-            if self.verify_exists_hook is None or force is True:
-                src_obj = obj
-                obj = '\n'.join(obj) + '\n'
-            else:
-                src_obj = list()
-                for itm in obj:
-                    if not self.verify_exists_hook.verify(itm):
-                        src_obj.append(itm)
-                obj = '\n'.join(src_obj) + '\n'
-        else:
-            if self.verify_exists_hook is None or force is True:
-                src_obj = obj
-                obj = obj + '\n'
-            else:
-                if not self.verify_exists_hook.verify(obj):
-                    src_obj = obj
-                    obj = obj + '\n'
-                else:
-                    return '', ''
+        if len(self.legal_files) == 1:
+            self.map_handles[READ_ENTRANCE] = self.map_handles[WRITE_ENTRANCE]
+            self.file_handles[READ_ENTRANCE] = self.file_handles[WRITE_ENTRANCE]
         
-        return src_obj, obj
-                    
-    def put(self, obj, force=False):
+    def _destroy_file(self):
+        if len(self.legal_files) == 0:
+            return
+        self.map_handles[READ_ENTRANCE].close()
+        self.file_handles[READ_ENTRANCE].close()
+        if len(self.legal_files) == 1:
+            self.map_handles[WRITE_ENTRANCE].close()
+            self.file_handles[WRITE_ENTRANCE].close()
+            self.map_handles.clear()
+            self.file_handles.clear()
+        elif len(self.legal_files) == 2:
+            self.map_handles[READ_ENTRANCE] = self.map_handles[WRITE_ENTRANCE]
+            self.file_handles[READ_ENTRANCE] = self.file_handles[WRITE_ENTRANCE]
+        else:
+            read_file_handle = self.file_handles[READ_ENTRANCE] \
+                = open(self.legal_files[-2], 'r+')
+            self.map_handles[READ_ENTRANCE] = mmap.mmap(read_file_handle.fileno(),
+                                                        self.node_file_size)
+        self.legal_files.pop(-1)
+                
+    def put_one(self, obj, force=False, commit=True):
         if self.stopped: return ''
+        if not self.inited: self.init()
         
-        src_obj, obj = self._get_obj(obj, force=force)
-                
-        if len(obj.replace('\n', '')) == 0:
+        assert isinstance(obj, str)
+        
+        if obj.strip() == '':
             return ''
+        
+        if not force and self.verify_exists_hook is not None:
+            if self.verify_exists_hook.verify(obj):
+                return None    
+        if len(self.legal_files) == 0:
+            self._generate_file()
             
         # If no file has enough space
-        if len(obj) > self.NODE_FILE_SIZE:
+        if len(obj) >= self.node_file_size:
             raise NodeNoSpaceForPut('No enouph space for this put.')
         
-        for f in self.map_files:
-            with self.lock:
-                # check if mmap created
-                if f not in self.map_handles:
-                    fp = self.file_handles[f]
-                    self._write_obj(fp, obj)
-                    
-                    m = mmap.mmap(fp.fileno(), self.NODE_FILE_SIZE)
-                    self.map_handles[f] = m
-                else:
-                    m = self.map_handles[f]
-                    size = m.rfind('\n')
-                    new_size = size + 1 + len(obj)
-                    
-                    if new_size >= self.NODE_FILE_SIZE:
-                        continue
-                    
-                    m[:new_size] = m[:size+1] + obj
-                    m.flush()
-                
-            return src_obj
-        
-        name = str(int(os.path.split(self.map_files[-1])[1]) + 1)
-        path = os.path.join(self.dir_, name)
-        self.map_files.append(path)
-        fp = open(path, 'w+')
-        self.file_handles[path] = fp
-        self._write_obj(fp, obj)
-        self._add_handles(path)
-        
-        return src_obj
+        with self.lock:
+            m = self.map_handles[WRITE_ENTRANCE]
+            size = m.rfind('\n') + 1
+            new_size = size + 1 + len(obj)
             
+            if new_size > self.node_file_size:
+                m.flush()
+                self._generate_file()
+                size = 0
+                new_size = 1 + len(obj)
+                m = self.map_handles[WRITE_ENTRANCE]
+            
+            m[:new_size] = m[:size] + obj + '\n'
+            if commit is True:
+                m.flush()
+                
+        return obj
+                    
+    def put(self, objects, force=False, commit=True):
+        if self.stopped: return ''
+        if not self.inited: self.init()
+        
+        if isinstance(objects, str):
+            return self.put_one(objects, force, commit)
+            
+        remains = []
+        for i, obj in enumerate(objects):
+            if_commit = False
+            if i == len(objects)-1 and commit:
+                if_commit = True
+            remains.append(self.put_one(obj, force, if_commit))
+        return remains
+                    
     def get(self):
         if self.stopped: return
+        if not self.inited: self.init()
         
-        for m in self.map_handles.values():
-            with self.lock:
+        m = self.map_handles[READ_ENTRANCE]
+        if m is None:
+            return
+        with self.lock:
+            pos = m.find('\n')
+            while pos >= 0:
+                obj = m[:pos]
+                m[:] = m[pos+1:] + '\x00' * (pos+1)
+                m.flush()
+                if len(obj.strip()) != 0:
+                    return obj.strip()
                 pos = m.find('\n')
-                while pos >= 0:
-                    obj = m[:pos]
-                    m[:] = m[pos+1:] + '\x00' * (pos+1)
-                    m.flush()
-                    if len(obj.strip()) != 0:
-                        return obj.strip()
-                    pos = m.find('\n')
-        
-    def _remove_handles(self, path):
-        if path in self.map_handles:
-            self.map_handles[path].close()
-            del self.map_handles[path]
-        if path in self.file_handles:
-            self.file_handles[path].close()
-            del self.file_handles[path]
-            
-    def _add_handles(self, path):
-        if path not in self.file_handles:
-            self.file_handles[path] = open(path, 'w+')
-        if path not in self.map_handles and \
-            os.path.getsize(path) > 0:
-            self.map_handles[path] = mmap.mmap(
-                self.file_handles[path].fileno(), self.NODE_FILE_SIZE)
-        
-    def merge(self):
-        if len(self.map_files) > 1:
-            for i in range(len(self.map_files)-1, 0, -1):
-                f_path1 = self.map_files[i-1]
-                f_path2 = self.map_files[i]
-                m1 = self.map_handles[f_path1]
-                m2 = self.map_handles[f_path2]
-                pos1 = m1.rfind('\n')
-                pos2 = m2.rfind('\n')
-                
-                if pos1 + pos2 + 2 < self.NODE_FILE_SIZE:
-                    m1[:pos1+pos2+2] = m1[:pos1+1] + m2[:pos2+1]
-                    m1.flush()
-                            
-                    self._remove_handles(f_path2)
-                    self.map_files.remove(f_path2)
-                    os.remove(f_path2)
-                    
-        for idx, f in enumerate(self.map_files):
-            if not f.endswith(str(idx+1)):
-                dir_ = os.path.dirname(f)
-                self._remove_handles(f)
-                self.map_files.remove(f)
-                
-                new_f = os.path.join(dir_, str(idx+1))
-                os.rename(f, new_f)
-                self.map_files.append(new_f)
-                self._add_handles(new_f)
-        self.map_files = sorted(self.map_files, key=lambda f: int(os.path.split(f)[1]))
+            else:
+                self._destroy_file()
+        return self.get()
         
     def __enter__(self):
         return self

@@ -94,3 +94,11 @@ def beautiful_soup(html, logger=None):
         if logger is not None:
             logger.info('lxml not installed')
         return BeautifulSoup(html)
+    
+def iterable(obj):
+    try:
+        iter(obj)
+    except TypeError:
+        return False
+    
+    return True

@@ -75,8 +75,11 @@ class Store(object):
                     handle.close()
                 
             if self.verify_exists_hook is not None:
-                self.verify_exists_hook.sync()
-                self.verify_exists_hook.close()
+                try:
+                    self.verify_exists_hook.sync()
+                    self.verify_exists_hook.close()
+                except ValueError:
+                    pass
         finally:
             with self.lock:
                 os.remove(self.lock_file)

@@ -68,9 +68,12 @@ class MessageQueue(object):
             
     def _register_rpc(self):
         if self.rpc_server:
-            self.rpc_server.register_function(self.put_backup_proxy, 'put_backup')
-            self.rpc_server.register_function(self.put_proxy, 'put')
-            self.rpc_server.register_function(self.get_proxy, 'get')
+            self.rpc_server.register_function(self.put_backup_proxy, 
+                                              name='put_backup', prefix='mq')
+            self.rpc_server.register_function(self.put_proxy, name='put',
+                                              prefix='mq')
+            self.rpc_server.register_function(self.get_proxy, 'get',
+                                              prefix='mq')
             
     def init(self):
         if self.inited: return
@@ -161,14 +164,14 @@ class MessageQueue(object):
             if priority > self.n_priorities: priority = self.n_priorities-1
             self.priority_stores[priority].put(objs, force=force)
         else:
-            client_call(node, 'put', objs, force, priority)
+            client_call(node, 'mq_put', objs, force, priority)
                 
     def _put_backup(self, node, bknode_objs, force=False):
         if node == self.current_node:
             for backup_node, obj in bknode_objs:
                 self.backup_stores[backup_node].put(obj, force=force)
         else:
-            client_call(node, 'put_backup', bknode_objs, force)
+            client_call(node, 'mq_put_backup', bknode_objs, force)
                 
     def _get(self, node, priority=0):
         if node == self.current_node:
@@ -176,7 +179,7 @@ class MessageQueue(object):
             if priority > self.n_priorities: priority = self.n_priorities-1
             str_ = self.priority_stores[priority].get()
         else:
-            str_ = client_call(node, 'get', priority)
+            str_ = client_call(node, 'mq_get', priority)
         if str_ is not None:
             return self._destringfy(str_)
             
@@ -204,6 +207,10 @@ class MessageQueue(object):
         self.init()
         inc_store = self.inc_store
         inc_store.put(self._stringfy(obj), force=force)
+        
+    def get_inc(self):
+        self.init()
+        return self._destringfy(self.inc_store.get())
         
     def _put_priorities_objs(self, node, obj_priorities, force=False):
         sorted_v = sorted(obj_priorities, key=itemgetter(1))

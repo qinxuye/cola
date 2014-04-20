@@ -23,7 +23,7 @@ Created on 2013-5-26
 import re
 
 from cola.core.errors import ConfigurationError
-from cola.job.context import Context
+from cola.job.settings import Settings
 
 JOB_NAME_RE = re.compile(r'(\w| )+')
 
@@ -48,11 +48,11 @@ class Job(object):
         self.user_conf = user_conf
         self.login_hook = login_hook
         
-        self.context = Context(user_conf=user_conf)
+        self.settings = Settings(user_conf=user_conf)
         
     def add_urlpattern(self, url_pattern):
         self.url_patterns += url_pattern
         
     def set_userconf(self, conf):
         self.user_conf = conf
-        self.context = Context(user_conf=self.user_conf)
+        self.settings = Settings(user_conf=self.user_conf)

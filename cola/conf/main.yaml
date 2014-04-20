@@ -16,3 +16,4 @@ job:
   master_port: 12102
   port: 12103
   instances: 1
+  priorities: 3 # priorities count in mq

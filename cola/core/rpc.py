@@ -35,6 +35,14 @@ class ColaRPCServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
         self.allow_none = True
         self.allow_reuse_address = True
         
+    def register_function(self, function, name=None, prefix=None):
+        if prefix is not None:
+            if name is None:
+                name = function.__name__
+            prefix = prefix+'_' if not prefix.endswith('_') else prefix
+            SimpleXMLRPCServer.register_function(self, function, name=prefix+name)
+        SimpleXMLRPCServer.register_function(self, function, name=name)
+        
 def client_call(server, func_name, *args, **kwargs):
     serv = xmlrpclib.ServerProxy('http://%s' % server)
     ignore = kwargs.get('ignore', False)

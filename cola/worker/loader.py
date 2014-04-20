@@ -27,6 +27,7 @@ import signal
 import random
 import socket
 import logging
+import multiprocessing
 
 from cola.core.mq import MessageQueue
 from cola.core.bloomfilter import FileBloomFilter
@@ -37,8 +38,9 @@ from cola.core.logs import get_logger
 from cola.core.utils import import_job
 from cola.core.errors import LoginFailure
 from cola.job.loader import JobLoader, LimitionJobLoader
+from cola.job.executors import UrlExecutor, BundleExecutor, SERIAL_FILENAME
 
-MAX_THREADS_SIZE = 10
+MAX_THREADS_SIZE = multiprocessing.cpu_count() * 2
 TIME_SLEEP = 10
 BUDGET_REQUIRE = 10
 MAX_ERROR_TIMES = 5
@@ -48,14 +50,14 @@ UNLIMIT_BLOOM_FILTER_CAPACITY = 1000000
 class JobWorkerRunning(Exception): pass
 
 class BasicWorkerJobLoader(JobLoader):
-    def __init__(self, job, data_dir, context=None, logger=None,
+    def __init__(self, job, data_dir, settings=None, rpc_server=None, logger=None,
                  local=None, nodes=None, copies=1, force=False):
         self.job = job
-        ctx = context or self.job.context
+        settings = settings or self.job.settings
         
         self.local = local
         if self.local is None:
-            host, port = get_ip(), ctx.job.port
+            host, port = get_ip(), settings.job.port
             self.local = '%s:%s' % (host, port)
         else:
             host, port = tuple(self.local.split(':', 1))
@@ -68,15 +70,15 @@ class BasicWorkerJobLoader(JobLoader):
             name='cola_worker_info_%s'%self.job.real_name)
             
         super(BasicWorkerJobLoader, self).__init__(
-            self.job, data_dir, self.local, 
-            context=ctx, copies=copies, force=force)
+            self.job, data_dir, self.local, rpc_server=rpc_server,
+            settings=settings, copies=copies, force=force)
         
         # instances count that run at the same time
-        self.instances = max(min(self.ctx.job.instances, MAX_THREADS_SIZE), 1)
+        self.instances = max(min(self.settings.job.instances, MAX_THREADS_SIZE), 1)
         # excecutings
-        self.executings = []
+        # self.executings = []
         # exception times that continously throw
-        self.error_times = 0
+        # self.error_times = 0
         # budget
         self.budget = 0
         
@@ -92,6 +94,8 @@ class BasicWorkerJobLoader(JobLoader):
         self.init_rpc_server()
         # init message queue
         self.init_mq()
+        # init executor
+        self.init_executor()
         
         # register signal
         signal.signal(signal.SIGINT, self.signal_handler)
@@ -104,7 +108,7 @@ class BasicWorkerJobLoader(JobLoader):
         self.rpc_server.register_function(self.pages, name='pages')
             
     def _init_bloom_filter(self):
-        size = self.job.context.job.size
+        size = self.job.settings.job.size
         base = 1 if not self.job.is_bundle else 1000 
         bloom_filter_file = os.path.join(self.root, 'bloomfilter')
         
@@ -121,17 +125,21 @@ class BasicWorkerJobLoader(JobLoader):
         return FileBloomFilter(bloom_filter_file, bloom_filter_size)
             
     def init_mq(self):
-        mq_store_dir = os.path.join(self.root, 'store')
-        mq_backup_dir = os.path.join(self.root, 'backup')
-        if not os.path.exists(mq_store_dir):
-            os.makedirs(mq_store_dir)
-        if not os.path.exists(mq_backup_dir):
-            os.makedirs(mq_backup_dir)
-            
-        self.mq = MessageQueue(self.nodes, self.local, self.rpc_server,
-            copies=self.copies)
-        self.mq.init_store(mq_store_dir, mq_backup_dir, 
-                           verify_exists_hook=self._init_bloom_filter())
+        mq_dir = os.path.join(self.root, 'mq')
+        self.mq = MessageQueue(self.nodes, current_node=self.local, 
+                               base_dir=mq_dir,
+                               rpc_server=self.rpc_server,
+                               copies=self.copies,
+                               verify_exists_hook=self._init_bloom_filter())
+        
+    def init_executor(self):
+        working_dir = os.path.join(self.root, 'executor')
+        executor_cls = BundleExecutor if self.job.is_bundle else UrlExecutor
+        
+        filename = os.path.join(working_dir, SERIAL_FILENAME)
+        self.executor = executor_cls.load(filename, self)
+        if self.executor is None:
+            self.executor = executor_cls(working_dir, self)
     
     def _release_stop_lock(self):
         try:
@@ -148,6 +156,7 @@ class BasicWorkerJobLoader(JobLoader):
         if self.logger is not None:
             self.logger.info('Finish visiting pages count: %s' % self.pages_size)
         self.stopped = True
+        self.executor.shutdown()
         self.mq.shutdown()
         try:
             for handler in self.logger.handlers:
@@ -158,21 +167,23 @@ class BasicWorkerJobLoader(JobLoader):
     def complete(self, obj):
         if self.logger is not None:
             self.logger.info('Finish %s' % obj)
-        if obj in self.executings:
-            self.executings.remove(obj)
+#         if obj in self.executings:
+#             self.executings.remove(obj)
         
-        if self.ctx.job.size <= 0:
+        if self.settings.job.size <= 0:
             return True
         return False
             
     def error(self, obj):
-        if obj in self.executings:
-            self.executings.remove(obj)
+        pass
+#         if obj in self.executings:
+#             self.executings.remove(obj)
         
     def stop(self):
         try:
-            self.mq.put(self.executings, force=True)
-            super(BasicWorkerJobLoader, self).stop()
+#             self.mq.put(self.executings, force=True)
+#             super(BasicWorkerJobLoader, self).stop()
+            self.finish()
         finally:
             self._release_stop_lock()
         
@@ -181,10 +192,10 @@ class BasicWorkerJobLoader(JobLoader):
         
     def _login(self, opener):
         if self.job.login_hook is not None:
-            if 'login' not in self.ctx.job or \
-                not isinstance(self.ctx.job.login, list):
+            if 'login' not in self.settings.job or \
+                not isinstance(self.settings.job.login, list):
                 raise ConfigurationError('If login_hook set, config files must contains `login`')
-            kw = random.choice(self.ctx.job.login)
+            kw = random.choice(self.settings.job.login)
             login_result = self.job.login_hook(opener, **kw)
             if isinstance(login_result, tuple) and len(login_result) == 2:
                 self.logger.error('login fail, reason: %s' % login_result[1])
@@ -307,37 +318,44 @@ class BasicWorkerJobLoader(JobLoader):
         if self.mq is not None:
             self.mq.add_node(node)
             
+#     def _run(self, stop_when_finish=False):
+#         def _call(opener=None):
+#             if opener is None:
+#                 opener = self.job.opener_cls()
+#             if not self._login(opener):
+#                 return
+#             
+#             stopped = False
+#             while not self.stopped and not stopped:
+#                 obj = self.mq.get()
+#                 self.info_logger.info('start to get %s' % obj)
+#                 if obj is None:
+#                     time.sleep(TIME_SLEEP)
+#                     continue
+#                 
+#                 if not self.apply():
+#                     return True
+#                 
+#                 self.executings.append(obj)
+#                 stopped = self.execute(obj, opener=opener)
+#                 
+#         try:
+#             threads = [threading.Thread(target=_call) for _ in range(self.instances)]
+#             if not stop_when_finish:
+#                 threads.append(threading.Thread(target=self.stop_lock.acquire))
+#             for t in threads:
+#                 t.start()
+#             for t in threads:
+#                 t.join()
+#         finally:
+#             self.finish()
+           
     def _run(self, stop_when_finish=False):
-        def _call(opener=None):
-            if opener is None:
-                opener = self.job.opener_cls()
-            if not self._login(opener):
-                return
-            
-            stopped = False
-            while not self.stopped and not stopped:
-                obj = self.mq.get()
-                self.info_logger.info('start to get %s' % obj)
-                if obj is None:
-                    time.sleep(TIME_SLEEP)
-                    continue
-                
-                if not self.apply():
-                    return True
-                
-                self.executings.append(obj)
-                stopped = self.execute(obj, opener=opener)
-                
-        try:
-            threads = [threading.Thread(target=_call) for _ in range(self.instances)]
-            if not stop_when_finish:
-                threads.append(threading.Thread(target=self.stop_lock.acquire))
-            for t in threads:
-                t.start()
-            for t in threads:
-                t.join()
-        finally:
-            self.finish()
+        self.executor.run()
+        if stop_when_finish:
+            t = threading.Thread(target=self.stop_lock.acquire)
+            t.start()
+            t.join()
             
     def run(self):
         raise NotImplementedError
@@ -350,10 +368,11 @@ class BasicWorkerJobLoader(JobLoader):
         
 class StandaloneWorkerJobLoader(LimitionJobLoader, BasicWorkerJobLoader):
     def __init__(self, job, data_dir, master=None, local=None, nodes=None, 
-                 context=None, logger=None, copies=1, force=False):
-        BasicWorkerJobLoader.__init__(self, job, data_dir, context=context, logger=logger,
-                                      local=local, nodes=nodes, copies=copies, force=force)
-        LimitionJobLoader.__init__(self, self.job, context=context)
+                 settings=None, rpc_server=None, logger=None, copies=1, force=False):
+        BasicWorkerJobLoader.__init__(self, job, data_dir, settings=settings, rpc_server=rpc_server,
+                                      logger=logger, local=local, nodes=nodes, copies=copies, 
+                                      force=force)
+        LimitionJobLoader.__init__(self, self.job, settings=settings)
         
         log_level = logging.INFO if not job.debug else logging.DEBUG
         if self.logger is None:
@@ -396,14 +415,17 @@ class StandaloneWorkerJobLoader(LimitionJobLoader, BasicWorkerJobLoader):
             
     def run(self, put_starts=True):
         if put_starts:
-            self.mq.put(self.job.starts)
-        self._run(stop_when_finish=True)
+            # self.mq.put(self.job.starts)
+            self.mq.put([self.job.unit_cls(start) for start in self.job.starts])
+        # self._run(stop_when_finish=True)
+        self._run()
         
 class WorkerJobLoader(BasicWorkerJobLoader):
     def __init__(self, job, data_dir, master, local=None, nodes=None, 
-                 context=None, logger=None, copies=1, force=False):
-        super(WorkerJobLoader, self).__init__(job, data_dir, context=context, logger=logger, 
-                                              local=local, nodes=nodes, copies=copies, force=force)
+                 settings=None, rpc_server=None, logger=None, copies=1, force=False):
+        super(WorkerJobLoader, self).__init__(job, data_dir, settings=settings, rpc_server=rpc_server,
+                                              logger=logger, local=local, nodes=nodes, copies=copies, 
+                                              force=force)
         log_level = logging.INFO if not job.debug else logging.DEBUG
         if self.logger is None:
             self.logger = get_logger(
@@ -428,7 +450,7 @@ class WorkerJobLoader(BasicWorkerJobLoader):
         client_call(self.master, 'error', obj)
         
     def _require_budget(self):
-        if self.ctx.job.limit == 0 or self.stopped:
+        if self.settings.job.limit == 0 or self.stopped:
             return
         
         if self.budget > 0:
@@ -443,7 +465,7 @@ class WorkerJobLoader(BasicWorkerJobLoader):
         
     def ready_for_run(self):
         self.run_lock.acquire()
-        self._run()
+        self._run(stop_when_finish=True)
         
     def run(self):
         self.run_lock.release()
@@ -473,7 +495,7 @@ def load_job(job_path, data_path=None, master=None, force=False):
             job_loader.run()
     else:
         nodes = client_call(master, 'get_nodes')
-        local = '%s:%s' % (get_ip(), job.context.job.port)
+        local = '%s:%s' % (get_ip(), job.settings.job.port)
         client_call(master, 'ready', local)
         with WorkerJobLoader(job, root, master, local=local, nodes=nodes, force=force) \
             as job_loader:

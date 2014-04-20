@@ -28,10 +28,10 @@ from cola.core.rpc import ColaRPCServer
 
 class JobLoader(object):
     
-    def __init__(self, job, dir_, local, 
-                 context=None, copies=1, force=False):
+    def __init__(self, job, dir_, local, rpc_server=None,
+                 settings=None, copies=1, force=False):
         self.job = job
-        self.ctx = context or job.context
+        self.settings = settings or job.settings
         
         self.root = dir_
         self.host, self.port = tuple(local.split(':', 1))
@@ -82,18 +82,18 @@ class JobLoader(object):
         raise NotImplementedError
         
 class LimitionJobLoader(object):
-    def __init__(self, job, context=None):
+    def __init__(self, job, settings=None):
         self.job = job
-        self.ctx = context or job.context
+        self.settings = settings or job.settings
         # status
         self.stopped = False
         
-        self.size = self.ctx.job.size
+        self.size = self.settings.job.size
         self.size_limit = self.size > 0
         self.started = 0
         self.completed = 0
         
-        self.rate = self.ctx.job.limit
+        self.rate = self.settings.job.limit
         self.rate_limit = self.rate > 0
         self.current_rate = 0
         

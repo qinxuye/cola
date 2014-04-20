@@ -34,8 +34,8 @@ class MessageQueueClient(object):
     def put(self, objs):
         self.mq.put(objs)
         
-    def get(self):
+    def get(self, priority=0):
         for n in self.nodes:
-            obj = self.mq._get(n)
+            obj = self.mq._get(n, priority=priority)
             if obj is not None:
                 return obj

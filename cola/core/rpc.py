@@ -33,7 +33,7 @@ class ColaRPCServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
     def __init__(self, *args, **kwargs):
         SimpleXMLRPCServer.__init__(self, *args, **kwargs)
         self.allow_none = True
-    
+        self.allow_reuse_address = True
         
 def client_call(server, func_name, *args, **kwargs):
     serv = xmlrpclib.ServerProxy('http://%s' % server)

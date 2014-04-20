@@ -23,7 +23,7 @@ import os
 import random
 import shutil
 
-from cola.core.mq.node import Node, NodeNoSpaceForPut
+from cola.core.mq.store import Store, StoreNoSpaceForPut
 
 
 class Test(unittest.TestCase):
@@ -31,7 +31,7 @@ class Test(unittest.TestCase):
 
     def setUp(self):
         self.dir_ = tempfile.mkdtemp()
-        self.node = Node(self.dir_)
+        self.node = Store(self.dir_)
 
     def tearDown(self):
         self.node.shutdown()
@@ -58,7 +58,7 @@ class Test(unittest.TestCase):
         batch1 = ['1' * 20, '2' * 20]
         batch2 = ['3' * 20, '4' * 20]
           
-        self.node = Node(self.dir_, size)
+        self.node = Store(self.dir_, size)
           
         self.assertEqual(self.node.put(batch1), batch1)
         self.assertEqual(self.node.put(batch2), batch2)
@@ -80,12 +80,12 @@ class Test(unittest.TestCase):
         self.assertEqual(self.node.get(), '6' * 20)
         self.assertEqual(self.node.get(), None)
           
-        self.assertRaises(NodeNoSpaceForPut, lambda: self.node.put('7' * 100))
+        self.assertRaises(StoreNoSpaceForPut, lambda: self.node.put('7' * 100))
         
     def testPutCloseGet(self):
         self.node.put('1'*10)
         self.node.shutdown()
-        self.node = Node(self.dir_)
+        self.node = Store(self.dir_)
         self.assertEqual(self.node.get(), '1'*10)
 
 if __name__ == "__main__":

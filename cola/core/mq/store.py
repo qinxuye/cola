@@ -27,28 +27,31 @@ import mmap
 import sys
 from collections import defaultdict
 
-class NodeExistsError(Exception): pass
+class StoreExistsError(Exception): pass
 
-class NodeNotSafetyShutdown(Exception): pass
+class StoreNotSafetyShutdown(Exception): pass
 
-class NodeNoSpaceForPut(Exception): pass
+class StoreNoSpaceForPut(Exception): pass
 
-NODE_FILE_SIZE = 4 * 1024 * 1024 # single node store file must be less than 4M.
-LEGAL_NODE_FILE_REGEX = re.compile("^\d+$")
+STORE_FILE_SIZE = 4 * 1024 * 1024 # single store file must be less than 4M.
+LEGAL_STORE_FILE_REGEX = re.compile("^\d+$")
 
 READ_ENTRANCE, WRITE_ENTRANCE = range(2)
 
-class Node(object):
-    def __init__(self, working_dir, size=NODE_FILE_SIZE, verify_exists_hook=None):
+class Store(object):
+    def __init__(self, working_dir, size=STORE_FILE_SIZE, 
+                 verify_exists_hook=None, mkdirs=False):
         self.lock = threading.Lock()
-        self.node_file_size = size
+        self.store_file_size = size
         self.verify_exists_hook = verify_exists_hook
         
         self.dir_ = working_dir
+        if mkdirs and not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
         self.lock_file = os.path.join(self.dir_, 'lock')
         with self.lock:
             if os.path.exists(self.lock_file):
-                raise NodeExistsError('Directory is being used by another node.')
+                raise StoreExistsError('Directory is being used by another store.')
             else:
                 open(self.lock_file, 'w').close()
 
@@ -89,8 +92,8 @@ class Node(object):
             
             file_path = os.path.join(self.dir_, fi)
             if not os.path.isfile(file_path) or \
-                LEGAL_NODE_FILE_REGEX.match(fi) is None:
-                raise NodeNotSafetyShutdown('Node did not shutdown safety last time.')
+                LEGAL_STORE_FILE_REGEX.match(fi) is None:
+                raise StoreNotSafetyShutdown('Store did not shutdown safety last time.')
             else:
                 self.legal_files.append(file_path)
                 
@@ -100,7 +103,7 @@ class Node(object):
             read_file_handle = self.file_handles[READ_ENTRANCE] \
                 = open(self.legal_files[-1], 'r+')
             self.map_handles[READ_ENTRANCE] = mmap.mmap(read_file_handle.fileno(), 
-                                                        self.node_file_size)
+                                                        self.store_file_size)
             if len(self.legal_files) == 1:
                 self.file_handles[WRITE_ENTRANCE] = self.file_handles[READ_ENTRANCE]
                 self.map_handles[WRITE_ENTRANCE] = self.map_handles[READ_ENTRANCE]
@@ -108,7 +111,7 @@ class Node(object):
                 write_file_handle = self.file_handles[WRITE_ENTRANCE] \
                     = open(self.legal_files[0], 'r+')
                 self.map_handles[WRITE_ENTRANCE] = mmap.mmap(write_file_handle.fileno(),
-                                                             self.node_file_size)
+                                                             self.store_file_size)
                 
         self.inited = True
     
@@ -116,7 +119,7 @@ class Node(object):
         prev = None
         if len(self.legal_files) > 0:
             fn = os.path.basename(self.legal_files[0])
-            prev = int(LEGAL_NODE_FILE_REGEX.match(fn).group())
+            prev = int(LEGAL_STORE_FILE_REGEX.match(fn).group())
         current = str(prev-1 if prev is not None else sys.maxint)
         file_path = os.path.join(self.dir_, current)
         if len(self.legal_files) > 1:
@@ -125,10 +128,10 @@ class Node(object):
         self.legal_files.insert(0, file_path)
         open(file_path, 'w').close()
         write_file_handle = self.file_handles[WRITE_ENTRANCE] = open(file_path, 'r+')
-        write_file_handle.write('\x00'*self.node_file_size)
+        write_file_handle.write('\x00'*self.store_file_size)
         write_file_handle.flush()
         self.map_handles[WRITE_ENTRANCE] = mmap.mmap(write_file_handle.fileno(),
-                                                     self.node_file_size)
+                                                     self.store_file_size)
         
         if len(self.legal_files) == 1:
             self.map_handles[READ_ENTRANCE] = self.map_handles[WRITE_ENTRANCE]
@@ -151,7 +154,7 @@ class Node(object):
             read_file_handle = self.file_handles[READ_ENTRANCE] \
                 = open(self.legal_files[-2], 'r+')
             self.map_handles[READ_ENTRANCE] = mmap.mmap(read_file_handle.fileno(),
-                                                        self.node_file_size)
+                                                        self.store_file_size)
         self.legal_files.pop(-1)
                 
     def put_one(self, obj, force=False, commit=True):
@@ -170,15 +173,15 @@ class Node(object):
             self._generate_file()
             
         # If no file has enough space
-        if len(obj) >= self.node_file_size:
-            raise NodeNoSpaceForPut('No enouph space for this put.')
+        if len(obj) >= self.store_file_size:
+            raise StoreNoSpaceForPut('No enouph space for this put.')
         
         with self.lock:
             m = self.map_handles[WRITE_ENTRANCE]
             size = m.rfind('\n') + 1
             new_size = size + 1 + len(obj)
             
-            if new_size > self.node_file_size:
+            if new_size > self.store_file_size:
                 m.flush()
                 self._generate_file()
                 size = 0

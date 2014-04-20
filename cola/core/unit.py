@@ -21,9 +21,10 @@ Created on 2013-5-23
 '''
 
 class Url(object):
-    def __init__(self, url, force=False):
+    def __init__(self, url, force=False, priority=0):
         self.url = url
         self.force = force
+        self.priority = priority
         
     def __str__(self):
         return self.url
@@ -35,11 +36,12 @@ class Bundle(object):
     So a bundle can generate several urls.
     '''
     
-    def __init__(self, label, force=False):
+    def __init__(self, label, force=False, priority=0):
         if not isinstance(label, str):
             raise ValueError("Bundle's label must a string.")
         self.label = label
         self.force = force
+        self.priority = priority
         
     def urls(self):
         raise NotImplementedError

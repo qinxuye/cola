@@ -126,6 +126,9 @@ class BundleExecutor(Executor):
                 self.priorities_objs[priority].append(bundle)
             n_empty = 0
             
+            if bundle is None:
+                break
+                
             bundle.current_urls = getattr(bundle, 'current_urls', []) or bundle.urls()
             url = None
             try:
@@ -148,21 +151,27 @@ class BundleExecutor(Executor):
                         next_urls.extend(bundle.current_urls)
                         bundle.current_urls = next_urls
                         if bundles:
-                            self.mq.put([str(b) for b in bundles if b.force is False])
-                            self.mq.put([str(b) for b in bundles if b.force is True], force=True)
+                            self.mq.put([b for b in bundles if b.force is False])
+                            self.mq.put([b for b in bundles if b.force is True], force=True)
                         if hasattr(opener, 'close'):
                             opener.close()
-                            
-                self.error_times = 0
                 
-                # put into incremental mq
-                del bundle.current_urls
-                self.mq.put_inc(bundle)
-                
-                self.priorities_objs[priority].remove(bundle)
+                if len(bundle.current_urls) == 0:            
+                    self.error_times = 0
+                    
+                    # put into incremental mq
+                    del bundle.current_urls
+                    self.mq.put_inc(bundle)
+                    
+                    if bundle in self.priorities_objs[priority]:
+                        self.priorities_objs[priority].remove(bundle)
+                    
+                    self.loader.complete(bundle.label)
+                else:
+                    if bundle not in self.priorities_objs[priority]:
+                        self.priorities_objs[priority].append(bundle)
+                        
                 bundle = None
-                
-                self.loader.complete(bundle)
                 
             except LoginFailure, e:
                 if not self.loader._login(opener):
@@ -191,6 +200,7 @@ class BundleExecutor(Executor):
         self.processes = [multiprocessing.Process(target=_call) \
                           for _ in range(self.loader.instances)]
         for process in self.processes:
+            process.daemon = True
             process.start()
             
     def shutdown(self):

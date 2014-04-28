@@ -59,7 +59,7 @@ class MessageQueue(object):
         self.hash_ring = HashRing(self.nodes)
         
         self.copies = max(min(len(self.nodes)-1, copies), 0)
-        self.n_priorities = n_priorities
+        self.n_priorities = max(n_priorities, 1)
         
         self.verify_exists_hook = verify_exists_hook
         

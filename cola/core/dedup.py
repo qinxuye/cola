@@ -26,15 +26,26 @@ class Deduper(object):
     def exist(self, key):
         raise NotImplementedError
     
+    def shutdown(self):
+        pass
+    
 class FileBloomFilterDeduper(Deduper):
     def __init__(self, sync_file, capacity):
         self.filter = FileBloomFilter(sync_file, capacity)
+        self.is_shutdown = False
         
     def exist(self, key):
         return self.filter.verify(key)
     
-    def __del__(self):
+    def shutdown(self):
+        if self.is_shutdown is True:
+            return
+        self.is_shutdown = True
+        
         try:
             self.filter.sync()
         finally:
             self.filter.close()
+            
+    def __del__(self):
+        self.shutdown()

@@ -5,3 +5,4 @@
 /data/*
 /data
 *test.yaml
+*.DS_Store

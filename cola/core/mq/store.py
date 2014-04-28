@@ -26,6 +26,14 @@ import threading
 import mmap
 import sys
 from collections import defaultdict
+import struct
+import marshal
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
+    
+from cola.core.utils import iterable
 
 class StoreExistsError(Exception): pass
 
@@ -38,22 +46,28 @@ LEGAL_STORE_FILE_REGEX = re.compile("^\d+$")
 
 READ_ENTRANCE, WRITE_ENTRANCE = range(2)
 
+MARSHAL, PICKLE = 'm', 'p'
+
 class Store(object):
     def __init__(self, working_dir, size=STORE_FILE_SIZE, 
-                 verify_exists_hook=None, mkdirs=False):
+                 deduper=None, mkdirs=False, 
+                 create_lock_file=False):
         self.lock = threading.Lock()
         self.store_file_size = size
-        self.verify_exists_hook = verify_exists_hook
+        self.deduper = deduper
         
         self.dir_ = working_dir
         if mkdirs and not os.path.exists(self.dir_):
             os.makedirs(self.dir_)
+            
+        self.create_lock_file = create_lock_file
         self.lock_file = os.path.join(self.dir_, 'lock')
         with self.lock:
-            if os.path.exists(self.lock_file):
-                raise StoreExistsError('Directory is being used by another store.')
-            else:
-                open(self.lock_file, 'w').close()
+            if create_lock_file is True:
+                if os.path.exists(self.lock_file):
+                    raise StoreExistsError('Directory is being used by another store.')
+                else:
+                    open(self.lock_file, 'w').close()
 
         self.stopped = False
         self.inited = False
@@ -73,16 +87,10 @@ class Store(object):
             for handle in self.file_handles.values():
                 if handle is not None:
                     handle.close()
-                
-            if self.verify_exists_hook is not None:
-                try:
-                    self.verify_exists_hook.sync()
-                    self.verify_exists_hook.close()
-                except ValueError:
-                    pass
         finally:
             with self.lock:
-                os.remove(self.lock_file)
+                if self.create_lock_file is True:
+                    os.remove(self.lock_file)
                 
         self.inited = False
         
@@ -159,39 +167,82 @@ class Store(object):
             self.map_handles[READ_ENTRANCE] = mmap.mmap(read_file_handle.fileno(),
                                                         self.store_file_size)
         self.legal_files.pop(-1)
-                
+        
+    def _stringfy(self, obj):
+        try:
+            return MARSHAL + marshal.dumps(obj)
+        except ValueError:
+            return PICKLE + pickle.dumps(obj)
+        
+    def _destringfy(self, src_str):
+        if len(src_str) < 2:
+            raise ValueError('String length must be at least 2.')
+        
+        t, str_ = src_str[0], src_str[1:]
+        if t == MARSHAL:
+            obj = marshal.loads(str_)
+        elif t == PICKLE:
+            obj = pickle.loads(str_)
+        else:
+            raise ValueError('String must contain a right type indicator.')
+        return obj
+    
+    def _get_verify_property(self, obj):
+        if isinstance(obj, str):
+            return obj
+        elif isinstance(obj, unicode):
+            return unicode.encode('utf-8')
+        else:
+            try:
+                return str(obj)
+            except:
+                return ''
+            
+    def _seek_writable_pos(self, map_handle):
+        pos = 0
+        while True:
+            if pos + 4 <= self.store_file_size:
+                size, = struct.unpack('I', map_handle[pos:pos+4])
+                if size == 0:
+                    return pos
+                pos += (4 + size)
+            else:
+                return -1
+        
+        return -1
+    
     def put_one(self, obj, force=False, commit=True):
-        if self.stopped: return ''
+        if self.stopped: return
         if not self.inited: self.init()
         
-        assert isinstance(obj, str)
+        if isinstance(obj, str) and obj.strip() == '':
+            return
         
-        if obj.strip() == '':
-            return ''
-        
-        if not force and self.verify_exists_hook is not None:
-            if self.verify_exists_hook.verify(obj):
-                return None    
+        if not force and self.deduper is not None:
+            prop = self._get_verify_property(obj)
+            if self.deduper.exist(prop):
+                return
         if len(self.legal_files) == 0:
             self._generate_file()
             
+        obj_str = self._stringfy(obj)
         # If no file has enough space
-        if len(obj) >= self.store_file_size:
+        if len(obj_str) + 4 > self.store_file_size:
             raise StoreNoSpaceForPut('No enouph space for this put.')
         
         with self.lock:
             m = self.map_handles[WRITE_ENTRANCE]
-            size = m.rfind('\n') + 1
-            new_size = size + 1 + len(obj)
+            pos = self._seek_writable_pos(m)
+            size = pos + 4 + len(obj_str)
             
-            if new_size > self.store_file_size:
+            if pos < 0 or size > self.store_file_size:
                 m.flush()
                 self._generate_file()
-                size = 0
-                new_size = 1 + len(obj)
+                pos = 0
+                size = 4 + len(obj_str)
                 m = self.map_handles[WRITE_ENTRANCE]
             
-            m[:new_size] = m[:size] + obj + '\n'
+            m[:size] = m[:pos] + struct.pack('I', len(obj_str)) + obj_str
             if commit is True:
                 m.flush()
                 
@@ -201,36 +252,52 @@ class Store(object):
         if self.stopped: return ''
         if not self.inited: self.init()
         
-        if isinstance(objects, str):
+        if isinstance(objects, basestring) or not iterable(objects):
             return self.put_one(objects, force, commit)
             
         remains = []
-        for i, obj in enumerate(objects):
-            if_commit = False
-            if i == len(objects)-1 and commit:
-                if_commit = True
-            remains.append(self.put_one(obj, force, if_commit))
+        for obj in objects:
+            result = self.put_one(obj, force, commit=False)
+            if result is not None:
+                remains.append(result)
+        
+        m = self.map_handles[WRITE_ENTRANCE]
+        if len(remains) > 0 and m is not None:
+            m.flush()
         return remains
                     
-    def get(self):
+    def get_one(self, commit=True):
         if self.stopped: return
         if not self.inited: self.init()
         
         m = self.map_handles[READ_ENTRANCE]
-        if m is None:
-            return
-        with self.lock:
-            pos = m.find('\n')
-            while pos >= 0:
-                obj = m[:pos]
-                m[:] = m[pos+1:] + '\x00' * (pos+1)
-                m.flush()
-                if len(obj.strip()) != 0:
-                    return obj.strip()
-                pos = m.find('\n')
-            else:
-                self._destroy_file()
-        return self.get()
+        while m is not None:
+            with self.lock:
+                size, = struct.unpack('I', m[:4])
+                if size == 0:
+                    self._destroy_file()
+                    m = self.map_handles[READ_ENTRANCE]
+                else:
+                    obj = self._destringfy(m[4:4+size])
+                    m[:] = m[4+size:] + '\x00' * (4+size)
+                    if commit is True:
+                        m.flush()
+                    return obj
+        
+    def get(self, size=1):
+        if size <= 1:
+            return self.get_one()
+        
+        results = []
+        for _ in range(size):
+            obj = self.get_one()
+            if obj is not None:
+                results.append(obj)
+        m = self.map_handles[READ_ENTRANCE]
+        if m is not None:
+            m.flush()
+        return results
+        
         
     def __enter__(self):
         return self

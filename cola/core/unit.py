@@ -20,7 +20,11 @@ Created on 2013-5-23
 @author: Chine
 '''
 
-class Url(object):
+class Unit(object):
+    def __str__(self):
+        raise NotImplementedError
+
+class Url(Unit):
     def __init__(self, url, force=False, priority=0):
         self.url = url
         self.force = force
@@ -29,7 +33,7 @@ class Url(object):
     def __str__(self):
         return self.url
 
-class Bundle(object):
+class Bundle(Unit):
     '''
     Sometimes the target is all the urls about a user.
     Then the urls compose the bundle.

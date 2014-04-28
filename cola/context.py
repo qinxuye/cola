@@ -47,7 +47,8 @@ class Settings(object):
                 setattr(self, k, getattr(dicts, k))
 
 class Context(object):
-    def __init__(self, settings, master, workers):
-        self.settings = settings
-        self.master = master
-        self.workers = workers
+    def __init__(self):
+        self.check()
+        
+    def check(self):
+        pass

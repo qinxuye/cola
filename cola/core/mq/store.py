@@ -34,6 +34,7 @@ except ImportError:
     import pickle
     
 from cola.core.utils import iterable
+from cola.core.mq import labelize
 
 class StoreExistsError(Exception): pass
 
@@ -186,17 +187,6 @@ class Store(object):
         else:
             raise ValueError('String must contain a right type indicator.')
         return obj
-    
-    def _get_verify_property(self, obj):
-        if isinstance(obj, str):
-            return obj
-        elif isinstance(obj, unicode):
-            return unicode.encode('utf-8')
-        else:
-            try:
-                return str(obj)
-            except:
-                return ''
             
     def _seek_writable_pos(self, map_handle):
         pos = 0
@@ -219,7 +209,7 @@ class Store(object):
             return
         
         if not force and self.deduper is not None:
-            prop = self._get_verify_property(obj)
+            prop = labelize(obj)
             if self.deduper.exist(prop):
                 return
         if len(self.legal_files) == 0:

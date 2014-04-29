@@ -21,14 +21,19 @@ Created on 2013-5-23
 '''
 
 class Unit(object):
+    def __init__(self, item, force=False, priority=0):
+        self.item = item
+        self.force = force
+        self.priority = priority
+    
     def __str__(self):
         raise NotImplementedError
 
 class Url(Unit):
     def __init__(self, url, force=False, priority=0):
+        super(Url, self).__init__(url, force=force, 
+                                  priority=priority)
         self.url = url
-        self.force = force
-        self.priority = priority
         
     def __str__(self):
         return self.url
@@ -43,9 +48,9 @@ class Bundle(Unit):
     def __init__(self, label, force=False, priority=0):
         if not isinstance(label, str):
             raise ValueError("Bundle's label must a string.")
+        super(Bundle, self).__init__(label, force=force,
+                                     priority=priority)
         self.label = label
-        self.force = force
-        self.priority = priority
         
     def urls(self):
         raise NotImplementedError

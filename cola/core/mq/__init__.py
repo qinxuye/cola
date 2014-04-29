@@ -47,6 +47,17 @@ CACHE_SIZE = 20
 
 MARSHAL, PICKLE, STRING, UNICODE = 'm', 'p', 's', 'u'
 
+def labelize(obj):
+    if isinstance(obj, str):
+        return obj
+    elif isinstance(obj, unicode):
+        return unicode.encode('utf-8')
+    else:
+        try:
+            return str(obj)
+        except:
+            return ''
+
 class MessageQueue(object):
     def __init__(self, nodes, current_node=None, base_dir=None, rpc_server=None, 
                  copies=1, n_priorities=3, verify_exists_hook=None):

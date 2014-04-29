@@ -25,14 +25,19 @@ try:
     import cPickle as pickle
 except ImportError:
     import pickle
+from collections import defaultdict
 
+from cola.core.rpc import client_call
 from cola.core.mq.store import Store
+from cola.core.mq.distributor import Distributor
     
 MQ_STATUS_FILENAME = 'mq.status'
 
 PRIORITY_STORE_FN = 'store'
 BACKUP_STORE_FN = 'backup'
 INCR_STORE_FN = 'inc'
+
+CACHE_SIZE = 20
 
 class LocalMessageQueueNode(object):
     def __init__(self, base_dir, rpc_server, addr, addrs,
@@ -79,15 +84,11 @@ class LocalMessageQueueNode(object):
         if self.rpc_server:
             self.rpc_server.register_function(self.put, name='put', 
                                               prefix='mq')
+            self.rpc_server.register_function(self.batch_put, name='batch_put', 
+                                              prefix='mq')
             self.rpc_server.register_function(self.put_backup, name='put_backup',
                                               prefix='mq')
-            self.rpc_server.register_function(self.put_inc, name='put_inc',
-                                              prefix='mq')
             self.rpc_server.register_function(self.get_proxy, name='get',
-                                              prefix='mq')
-            self.rpc_server.register_function(self.get_backup, name='get_backup',
-                                              prefix='mq')
-            self.rpc_server.register_function(self.get_inc, name='get_inc',
                                               prefix='mq')
         
     def put(self, objs, force=False, priority=0):
@@ -96,6 +97,19 @@ class LocalMessageQueueNode(object):
         priority = max(min(priority, self.n_priorities-1), 0)
         priority_store = self.priority_stores[priority]
         priority_store.put(objs, force=force)
+        
+    def batch_put(self, objs):
+        self.init()
+        
+        puts = defaultdict(lambda:defaultdict(list))
+        for obj in objs:
+            priority = getattr(obj, 'priority', 0)
+            force = getattr(obj, 'force', False)
+            puts[priority][force].append(obj)
+        
+        for priority, m in puts.iteritems():
+            for force, obs in m.iteritems():
+                self.put(obs, force=force, priority=priority)
     
     def put_backup(self, node, objs, force=False):
         self.init()
@@ -134,14 +148,15 @@ class LocalMessageQueueNode(object):
             backup_store.shutdown()
         self.inc_store.shutdown()
     
-class MessageQueueProxy(object):
+class MessageQueueNodeProxy(object):
     def __init__(self, base_dir, rpc_server, addr, addrs,
                  copies=1, n_priorities=3, deduper=None):
         self.dir_ = base_dir
-        self.addr_ = addr_
+        self.addr_ = addr
         self.mq_node = LocalMessageQueueNode(
             base_dir, rpc_server, addr, addrs, 
             copies=copies, n_priorities=n_priorities, deduper=deduper)
+        self.distributor = Distributor(addrs, copies=copies)
         
         self.inited = False
         
@@ -154,7 +169,10 @@ class MessageQueueProxy(object):
         if not hasattr(self, 'caches_inited'):
             self.caches_inited = dict((node, False) for node in self.nodes)
         if not hasattr(self, 'backup_caches'):
-            self.backup_caches = dict((node, []) for node in self.nodes)
+            self.backup_caches = dict((node, {}) for node in self.nodes)
+            for node in self.nodes:
+                for other_node in [n for n in self.nodes if node != n]:
+                    self.backup_caches[node][other_node] = []
             
         self.inited = True
         
@@ -176,12 +194,62 @@ class MessageQueueProxy(object):
             f.write(pickle.dumps(t))
             
     def _remote_or_local_put(self, addr, objs, force=False, priority=0):
-        pass
+        if addr == self.addr_:
+            self.mq_node.put(objs, force=force, priority=priority)
+        else:
+            client_call(addr, 'mq_put', objs, force=force, priority=priority)
+            
+    def _remote_or_local_batch_put(self, addr, objs):
+        if addr == self.addr_:
+            self.mq_node.batch_put(objs)
+        else:
+            client_call(addr, 'mq_batch_put', objs)
+            
+    def _remote_or_local_get(self, addr, size=1, priority=0):
+        if addr == self.addr_:
+            self.mq_node.get(size=size, priority=priority)
+        else:
+            client_call(addr, 'mq_get', size=size, priority=priority)
+            
+    def _remote_or_local_put_backup(self, addr, backup_addr, objs, 
+                                    force=False):
+        if addr == self.addr_:
+            self.mq_node.put_backup(backup_addr, objs, force=force)
+        else:
+            client_call(addr, 'mq_put_backup', backup_addr, objs, 
+                        force=force)
+                    
+    def put(self, objects, flush=False):
+        nodes_objs, backup_nodes_objs = \
+            self.distributor.distribute(objects)
+            
+        for node, objs in nodes_objs.iteritems():
+            self.caches[node].extend(objs)
+            if not self.caches_inited[node] or \
+                len(self.cache[node]) >= CACHE_SIZE or flush:
+                self._remote_or_local_batch_put(node, self.caches[node])
+                
+                self.caches[node] = []
+                self.caches_inited[node] = True
         
-    def put(self, objects, force=False, flush=False):
+        for node, m in backup_nodes_objs.iteritems():
+            for backup_node, objs in m.iteritems():
+                self.backup_caches[node][backup_node].extend(objs)
+            
+            size = sum([len(obs) for obs in \
+                            self.backup_caches[node].values()])
+            if size >= CACHE_SIZE or flush:
+                for backup_node, objs in m.iteritems():
+                    self._remote_or_local_put_backup(
+                        node, backup_node, objs)
+            
+    def get(self, priority=0):
         pass
     
-    def get(self, priority=0):
+    def add_node(self, addr):
+        pass
+    
+    def remove_node(self, addr):
         pass
     
     def shutdown(self):

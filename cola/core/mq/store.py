@@ -203,7 +203,7 @@ class Store(object):
     
     def put_one(self, obj, force=False, commit=True):
         if self.stopped: return
-        if not self.inited: self.init()
+        self.init()
         
         if isinstance(obj, str) and obj.strip() == '':
             return
@@ -239,8 +239,8 @@ class Store(object):
         return obj
                     
     def put(self, objects, force=False, commit=True):
-        if self.stopped: return ''
-        if not self.inited: self.init()
+        if self.stopped: return
+        self.init()
         
         if isinstance(objects, basestring) or not iterable(objects):
             return self.put_one(objects, force, commit)
@@ -258,7 +258,7 @@ class Store(object):
                     
     def get_one(self, commit=True):
         if self.stopped: return
-        if not self.inited: self.init()
+        self.init()
         
         m = self.map_handles[READ_ENTRANCE]
         while m is not None:
@@ -277,6 +277,8 @@ class Store(object):
     def get(self, size=1):
         if size <= 1:
             return self.get_one()
+        
+        self.init()
         
         results = []
         for _ in range(size):

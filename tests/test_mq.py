@@ -23,9 +23,9 @@ import shutil
 import threading
 import random
 
+from cola.core.unit import Url
 from cola.core.rpc import ColaRPCServer
-from cola.core.mq import MessageQueue
-from cola.core.mq.client import MessageQueueClient
+from cola.core.mq import MessageQueue, MessageQueueClient
 
 class Test(unittest.TestCase):
 
@@ -39,8 +39,8 @@ class Test(unittest.TestCase):
         for i in range(self.size):
             setattr(self, 'rpc_server%s'%i, ColaRPCServer(('localhost', ports[i])))
             setattr(self, 'mq%s'%i, 
-                MessageQueue(self.nodes[:], self.nodes[i], self.dirs[i],
-                             getattr(self, 'rpc_server%s'%i))
+                MessageQueue(self.dirs[i], getattr(self, 'rpc_server%s'%i), 
+                             self.nodes[i], self.nodes[:])
             )
             thd = threading.Thread(target=getattr(self, 'rpc_server%s'%i).serve_forever)
             thd.setDaemon(True)
@@ -61,50 +61,81 @@ class Test(unittest.TestCase):
     def testMQ(self):
         mq = self.mq0
         data = [str(random.randint(10000, 50000)) for _ in range(20)]
-                 
-        mq.put(data)
+                     
+        mq.put(data, flush=True)
         gets = []
         while True:
             get = mq.get()
             if get is None:
                 break
             gets.append(get)
-                 
+                     
         self.assertEqual(sorted(data), sorted(gets))
-               
+                  
         # test mq client
         data = str(random.randint(10000, 50000))
         self.client.put(data)
-               
         get = self.client.get()
-                    
         self.assertEqual(data, get)
-        
-        # test put into different priority
-        from cola.core.unit import Url
+            
+        self.client.put(Url('http://qinxuye.me', priority=1))
+        get = self.client.get(priority=1)
+        self.assertEqual(get.url, 'http://qinxuye.me')
+            
+        # test put into different priorities
         self.client.put(Url('http://qinxuye.me', priority=0))
         self.client.put(Url('http://qinxuye.me/about', priority=1))
-         
-        self.assertEqual(self.client.get(1).url, 'http://qinxuye.me/about')
-        self.assertEqual(self.client.get(0).url, 'http://qinxuye.me')
-        
-    def testAddOrRemoveNode(self):
+             
+        self.assertEqual(self.client.get(priority=1).url, 'http://qinxuye.me/about')
+        self.assertEqual(self.client.get(priority=0).url, 'http://qinxuye.me')
+          
+    def testRemoveNode(self):
         mq = self.mq0
         data = [str(i) for i in range(100)]
-              
+                 
+        # test remove node
         mq.put(data)
         self.mq2.shutdown()
         self.mq0.remove_node(self.nodes[2])
         self.mq1.remove_node(self.nodes[2])
-              
+                 
         gets = []
         while True:
             get = mq.get()
             if get is None:
                 break
             gets.append(get)
-               
+              
         self.assertEqual(sorted(data), sorted(gets))
+        
+    def testAddNode(self):
+        data = range(100)
+         
+        new_port = random.randint(10000, 30000)
+        new_node = 'localhost:%s' % new_port
+        new_rpc_server = ColaRPCServer(('localhost', new_port))
+        thd = threading.Thread(target=new_rpc_server.serve_forever)
+        thd.setDaemon(True)
+        thd.start()
+        new_dir = tempfile.mkdtemp()
+        ns = list(self.nodes)
+        ns.append(new_node)
+        new_mq = MessageQueue(new_dir, new_rpc_server, new_node, ns)
+         
+        try:
+            self.mq0.add_node(new_node)
+            self.mq1.add_node(new_node)
+            self.mq2.add_node(new_node)
+             
+            self.mq0.put(data)
+             
+            self.assertEqual(data, sorted(self.mq0.get(size=100)))
+        finally:
+            try:
+                new_rpc_server.shutdown()
+                new_mq.shutdown()
+            finally:
+                shutil.rmtree(new_dir)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

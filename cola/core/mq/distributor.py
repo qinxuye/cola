@@ -22,8 +22,9 @@ Created on 2014-4-30
 
 from collections import defaultdict
 
+from cola.core.utils import iterable
 from cola.core.mq.hash_ring import HashRing
-from cola.core.mq import labelize
+from cola.core.mq.utils import labelize
 
 class Distributor(object):
     def __init__(self, addrs, copies=1):
@@ -34,6 +35,9 @@ class Distributor(object):
     def distribute(self, objs):
         node_objs = defaultdict(list)
         backup_node_objs = defaultdict(lambda: defaultdict(list))
+        
+        if isinstance(objs, basestring) or not iterable(objs):
+            objs = [objs, ]
         
         for obj in objs:
             str_ = labelize(obj)

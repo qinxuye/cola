@@ -15,20 +15,18 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Created on 2013-5-23
+Created on 2014-5-1
 
-@author: Chine
+@author: chine
 '''
 
-from cola.core.mq.node import MessageQueueNodeProxy
-from cola.core.mq.client import MessageQueueClient
-
-MessageQueueClient = MessageQueueClient
-
-class MessageQueue(MessageQueueNodeProxy):
-    def __init__(self, working_dir, rpc_server, addr, addrs, 
-                 app_name=None, copies=1, n_priorities=3,
-                 deduper=None):
-        super(MessageQueue, self).__init__(working_dir, rpc_server, addr, addrs,
-                                           copies=copies, n_priorities=n_priorities,
-                                           deduper=deduper, app_name=app_name)
+def labelize(obj):
+    if isinstance(obj, str):
+        return obj
+    elif isinstance(obj, unicode):
+        return unicode.encode('utf-8')
+    else:
+        try:
+            return str(obj)
+        except:
+            return ''

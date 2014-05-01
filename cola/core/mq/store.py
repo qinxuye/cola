@@ -34,7 +34,7 @@ except ImportError:
     import pickle
     
 from cola.core.utils import iterable
-from cola.core.mq import labelize
+from cola.core.mq.utils import labelize
 
 class StoreExistsError(Exception): pass
 

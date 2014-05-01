@@ -20,22 +20,56 @@ Created on 2013-5-28
 @author: Chine
 '''
 
-from cola.core.mq.hash_ring import HashRing
-from cola.core.mq import MessageQueue
+from random import shuffle
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
+
+from cola.core.utils import get_rpc_prefix
+from cola.core.rpc import client_call
+from cola.core.mq.distributor import Distributor
 
 class MessageQueueClient(object):
     
-    def __init__(self, nodes, copies=1):
-        self.nodes = nodes
-        self.hash_ring = HashRing(self.nodes)
-        self.copies = max(min(len(self.nodes)-1, copies), 0)
-        self.mq = MessageQueue(nodes, copies=copies)
+    def __init__(self, addrs, app_name=None, copies=1):
+        self.addrs = addrs
+        self.distributors = Distributor(addrs, copies=copies)
+        self.prefix = get_rpc_prefix(app_name, 'mq')
         
     def put(self, objs):
-        self.mq.put(objs)
+        addrs_objs, addrs_backup_objs = \
+            self.distributors.distribute(objs)
         
-    def get(self, priority=0):
-        for n in self.nodes:
-            obj = self.mq._get(n, priority=priority)
-            if obj is not None:
-                return obj
+        for addr, objs in addrs_objs.iteritems():
+            client_call(addr, self.prefix+'batch_put', pickle.dumps(objs))
+        for addr, m in addrs_backup_objs.iteritems():
+            for b_addr, objs in m.iteritems():
+                client_call(addr, self.prefix+'put_backup', b_addr, 
+                            pickle.dumps(objs))
+        
+    def get(self, size=1, priority=0):
+        size = max(size, 1)
+        
+        addrs = list(self.addrs)
+        shuffle(addrs)
+        
+        results = []
+        for addr in addrs:
+            left = size - len(results)
+            if left <= 0:
+                break
+            
+            objs = pickle.loads(client_call(addr, self.prefix+'get', 
+                                            left, priority))
+            if objs is None:
+                continue
+            if not isinstance(objs, list):
+                objs = [objs, ]
+            results.extend(objs)
+        
+        if size == 1:
+            if len(results) == 0:
+                return
+            return results[0]
+        return results

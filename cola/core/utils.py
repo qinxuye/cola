@@ -102,3 +102,16 @@ def iterable(obj):
         return False
     
     return True
+
+def get_rpc_prefix(app_name=None, prefix=None):
+    if app_name and not app_name.endswith('_'):
+        app_name += '_'
+    elif not app_name:
+        app_name = ''
+        
+    if prefix and not prefix.endswith('_'):
+        prefix += '_'
+    elif not prefix:
+        prefix = ''
+        
+    return app_name + prefix

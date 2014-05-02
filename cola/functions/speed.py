@@ -15,20 +15,23 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Created on 2013-5-17
+Created on 2014-5-2
 
-@author: Chine
+@author: chine
 '''
 
-class DependencyNotInstalledError(Exception):
-    def __init__(self, dep):
-        self.dep = dep
+from cola.core.utils import get_rpc_prefix
+
+FUNC_PREFIX = 'speed_control_'
+
+class SpeedControlServer(object):
+    def __init__(self, working_dir, settings, 
+                 rpc_server=None, app_name=None):
+        self.dir_ = working_dir
+        self.settings = settings
+        self.rpc_server = rpc_server
+        self.app_name = app_name
+        self.prefix = get_rpc_prefix(self.app_name, FUNC_PREFIX)
         
-    def __str__(self):
-        return 'Error because lacking of dependency: %s' % self.dep
-    
-class ConfigurationError(Exception): pass
-
-class LoginFailure(Exception): pass
-
-class FetchBannedError(Exception): pass
+        self.speed = self.settings.speed.max
+        self.adaptive = self.settings.speed.adaptive

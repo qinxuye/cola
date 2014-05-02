@@ -15,20 +15,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Created on 2013-5-17
+Created on 2014-5-2
 
-@author: Chine
+@author: chine
 '''
-
-class DependencyNotInstalledError(Exception):
-    def __init__(self, dep):
-        self.dep = dep
-        
-    def __str__(self):
-        return 'Error because lacking of dependency: %s' % self.dep
-    
-class ConfigurationError(Exception): pass
-
-class LoginFailure(Exception): pass
-
-class FetchBannedError(Exception): pass

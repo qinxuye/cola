@@ -48,7 +48,6 @@ class BudgetApplyServer(object):
                  rpc_server=None, app_name=None):
         self.dir_ = working_dir
         self.settings = settings
-        self.is_local = rpc_server is None
         self.rpc_server = rpc_server
         self.app_name = app_name
         self.prefix = get_rpc_prefix(self.app_name, FUNC_PREFIX)

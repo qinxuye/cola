@@ -28,16 +28,18 @@ except ImportError:
     import pickle
 
 from cola.core.utils import get_rpc_prefix
+from cola.core.rpc import client_call
 
 FUNC_PREFIX = "budget_apply_"
 
 SUFFICIENT, NOAPPLIED, ALLFINISHED = range(3)
+DEFAULT_BUDGETS = 3
 BUDGET_APPLY_STATUS_FILENAME = 'budget.apply.status'
 
 def synchronized(func):
     def inner(self, *args, **kw):
         with self.lock:
-            func(*args, **kw)
+            return func(self, *args, **kw)
     return inner
 
 class BudgetApplyServer(object):
@@ -52,6 +54,7 @@ class BudgetApplyServer(object):
         self.prefix = get_rpc_prefix(self.app_name, FUNC_PREFIX)
         
         self.budgets = settings.job.size
+        self.limit = self.budgets >= 0
         self.applied = 0
         self.finished = 0
         
@@ -59,21 +62,27 @@ class BudgetApplyServer(object):
         
         self.load()
         self.set_status()
+        self._register_rpc()
         
     def _register_rpc(self):
         if self.rpc_server is not None:
-            self.rpc_server.register(self.set_budgets, prefix=self.prefix)
-            self.rpc_server.register(self.inc_budgets, prefix=self.prefix)
-            self.rpc_server.register(self.dec_budgets, prefix=self.prefix)
-            self.rpc_server.register(self.apply, prefix=self.prefix)
-            self.rpc_server.register(self.finish, prefix=self.prefix)
-            self.rpc_server.register(self.error, prefix=self.prefix)
+            self.rpc_server.register_function(self.set_budgets, 
+                                              name='set_budgets', prefix=self.prefix)
+            self.rpc_server.register_function(self.inc_budgets, 
+                                              name='inc_budgets', prefix=self.prefix)
+            self.rpc_server.register_function(self.dec_budgets, 
+                                              name='dec_budgets', prefix=self.prefix)
+            self.rpc_server.register_function(self.apply, 
+                                              name='apply', prefix=self.prefix)
+            self.rpc_server.register_function(self.finish, 
+                                              name='finish', prefix=self.prefix)
+            self.rpc_server.register_function(self.error, 
+                                              name='error', prefix=self.prefix)
             
-    @synchronized
     def set_status(self):
         assert self.finished <= self.applied
         
-        if self.applied < self.budgets:
+        if not self.limit or self.applied < self.budgets:
             self.status = SUFFICIENT
         elif self.applied >= self.budgets and \
             self.finished < self.budgets:
@@ -94,28 +103,35 @@ class BudgetApplyServer(object):
     
     def load(self):
         save_file = os.path.join(self.dir_, BUDGET_APPLY_STATUS_FILENAME)
-        with open(save_file) as f:
-            self.applied, self.finished = pickle.load(f)
+        if os.path.exists(save_file):
+            with open(save_file) as f:
+                self.applied, self.finished = pickle.load(f)
         
     @synchronized
     def set_budgets(self, budgets):
         self.budgets = budgets
+        self.limit = self.budgets >= 0
         self.set_status()
     
     @synchronized
     def inc_budgets(self, budgets):
-        self.budgets += budgets
-        self.set_status()
+        if self.limit:
+            self.budgets += budgets
+            self.set_status()
         
     @synchronized
     def dec_budgets(self, budgets):
-        self.budgets -= budgets
-        self.set_status()
+        if self.limit:
+            self.budgets -= budgets
+            self.set_status()
         
     @synchronized
     def apply(self, budget):
-        rest = self.budgets - self.applied
-        result = max(min(budget, rest), 0)
+        if not self.limit:
+            result = budget
+        else:
+            rest = self.budgets - self.applied
+            result = max(min(budget, rest), 0)
         self.applied += result
         self.set_status()
         return result
@@ -123,9 +139,44 @@ class BudgetApplyServer(object):
     @synchronized
     def finish(self, size=1):
         self.finished += size
+        self.finished = min(self.applied, self.finished)
         self.set_status()
         
     @synchronized
     def error(self, size=1):
         self.applied -= size
+        self.applied = max(self.applied, self.finished)
         self.set_status()
+        
+class BudgetApplyClient(object):
+    def __init__(self, server, app_name=None):
+        if isinstance(server, BudgetApplyServer):
+            self.remote = False
+        else:
+            self.remote = True
+        self.server = server
+        self.prefix = get_rpc_prefix(app_name, FUNC_PREFIX)
+        
+    def _call(self, func, *args):
+        if self.remote:
+            return client_call(self.server, self.prefix+func, *args)
+        else:
+            return getattr(self.server, func)(*args) 
+        
+    def apply(self, budget):
+        return self._call('apply', budget)
+        
+    def finish(self, size=1):
+        return self._call('finish', size)
+    
+    def error(self, size=1):
+        return self._call('error', size)
+    
+    def set_budget(self, budget):
+        return self._call('set_budget', budget)
+    
+    def inc_budget(self, budget):
+        return self._call('inc_budget', budget)
+    
+    def dec_budget(self, budget):
+        return self._call('dec_budget', budget)

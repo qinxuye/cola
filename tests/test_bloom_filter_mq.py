@@ -25,8 +25,8 @@ import tempfile
 import shutil
 import os
 
-from cola.core.mq.node import Node
-from cola.core.bloomfilter import FileBloomFilter
+from cola.core.mq.store import Store
+from cola.core.dedup import FileBloomFilterDeduper
 
 class Test(unittest.TestCase):
 
@@ -34,37 +34,38 @@ class Test(unittest.TestCase):
     def setUp(self):
         self.dir_ = tempfile.mkdtemp()
         self.node_dir = os.path.join(self.dir_, 'node')
-        os.mkdir(self.node_dir)
-        bloom_filter_hook = FileBloomFilter(
+        deduper =  FileBloomFilterDeduper(
             os.path.join(self.dir_, 'bloomfilter'), 10
         )
-        self.node = Node(self.node_dir, verify_exists_hook=bloom_filter_hook)
+        self.store = Store(self.node_dir, deduper=deduper,
+                          mkdirs=True)
 
     def tearDown(self):
-        self.node.shutdown()
+        self.store.shutdown()
         shutil.rmtree(self.dir_)
           
     def testPutGet(self):
         num = str(12345)
         
-        self.assertEqual(self.node.put(num), num)
-        self.assertEqual(self.node.put(num), '')
+        self.assertEqual(self.store.put(num), num)
+        self.assertEqual(self.store.put(num), None)
         
         num2 = str(67890)
         nums = [num, num2]
-        self.assertEqual(self.node.put(nums), [num2])
+        self.assertEqual(self.store.put(nums), [num2])
         
-        self.node.shutdown()
+        self.store.shutdown()
+        self.store.deduper.shutdown()
         self.assertGreater(os.path.getsize(os.path.join(self.dir_, 'bloomfilter')), 0)
         
-        bloom_filter_hook = FileBloomFilter(
+        bloom_filter_deduper = FileBloomFilterDeduper(
             os.path.join(self.dir_, 'bloomfilter'), 5
         )
-        self.node = Node(self.node_dir, verify_exists_hook=bloom_filter_hook)
+        self.store = Store(self.node_dir, deduper=bloom_filter_deduper)
         
         num3 = str(13579)
         nums = [num, num2, num3]
-        self.assertEqual(self.node.put(nums), [num3])
+        self.assertEqual(self.store.put(nums), [num3])
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

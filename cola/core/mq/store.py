@@ -253,7 +253,8 @@ class Store(object):
         
         m = self.map_handles[WRITE_ENTRANCE]
         if len(remains) > 0 and m is not None:
-            m.flush()
+            with self.lock:
+                m.flush()
         return remains
                     
     def get_one(self, commit=True):
@@ -287,7 +288,8 @@ class Store(object):
                 results.append(obj)
         m = self.map_handles[READ_ENTRANCE]
         if m is not None:
-            m.flush()
+            with self.lock:
+                m.flush()
         return results
         
         

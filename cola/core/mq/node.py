@@ -228,7 +228,7 @@ class MessageQueueNodeProxy(object):
             return
         
         with open(save_file, 'r') as f:
-            self.caches, self.caches_inited, self.backup_caches = pickle.loads(f.read())
+            self.caches, self.caches_inited, self.backup_caches = pickle.load(f)
     
     def save(self):
         if not self.inited:
@@ -237,7 +237,7 @@ class MessageQueueNodeProxy(object):
         save_file = os.path.join(self.dir_, MQ_STATUS_FILENAME)
         with open(save_file, 'w') as f:
             t = (self.caches, self.caches_inited, self.backup_caches)
-            f.write(pickle.dumps(t))
+            pickle.dump(t, f)
         
     def _check_empty(self, objs):
         if objs is None:

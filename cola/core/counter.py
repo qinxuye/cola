@@ -20,6 +20,8 @@ Created on 2014-5-2
 @author: chine
 '''
 
+import threading
+
 class Aggregator(object):
     def create_combiner(self, val):
         raise NotImplementedError
@@ -75,30 +77,38 @@ class OverwriteAggregator(Aggregator):
         return val
 
 class Counter(object):
-    def __init__(self, agg=AddAggregator()):
-        self.acc = {}
+    def __init__(self, agg=AddAggregator(), container={}):
+        self.container = container
         self.agg = agg
         
+        self.lock = threading.Lock()
+        
     def inc(self, group, item, val=1):
-        if group not in self.acc:
-            self.acc[group] = {}
-        if item not in self.acc[group]:
-            self.acc[group][item] = self.agg.create_combiner(val)
-        else:
-            src_combiner = self.acc[group][item]
-            self.acc[group][item] = \
-                self.agg.merge_val(src_combiner, val)
+        with self.lock:
+            if group not in self.container:
+                self.container[group] = {}
+            if item not in self.container[group]:
+                self.container[group][item] = self.agg.create_combiner(val)
+            else:
+                src_combiner = self.container[group][item]
+                self.container[group][item] = \
+                    self.agg.merge_val(src_combiner, val)
             
     def merge(self, other_counter):
         if self.agg.__class__ != other_counter.agg.__class__:
             raise ValueError('merged counter must have the same aggregator class')
         
-        for group, kv in other_counter.acc.iteritems():
-            for item, val in kv.iteritems():
-                if group not in self.acc:
-                    self.acc[group] = {}
-                if item not in self.acc[group]:
-                    self.acc[group] = val
-                else:
-                    self.acc[group] = self.agg.merge_combiner(
-                        self.acc[group], val)
+        with self.lock:
+            for group, kv in other_counter.container.iteritems():
+                for item, val in kv.iteritems():
+                    if group not in self.container:
+                        self.container[group] = {}
+                    if item not in self.container[group]:
+                        self.container[group] = val
+                    else:
+                        self.container[group] = self.agg.merge_combiner(
+                            self.container[group], val)
+                    
+    def reset(self, container={}):
+        with self.lock:
+            self.container = container

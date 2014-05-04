@@ -93,6 +93,11 @@ class Counter(object):
                 src_combiner = self.container[group][item]
                 self.container[group][item] = \
                     self.agg.merge_val(src_combiner, val)
+                    
+    def get(self, group, item, default_val=None):
+        if group not in self.container:
+            return default_val
+        return self.container[group].get(item, default_val)
             
     def merge(self, other_counter):
         if self.agg.__class__ != other_counter.agg.__class__:

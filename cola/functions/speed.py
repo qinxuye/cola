@@ -89,11 +89,17 @@ class SpeedControlServer(object):
         self.load()
         
         self.stopped = False
+        self._register_rpc()
         self._init_rate_service()
         
     def _register_rpc(self):
         if self.rpc_server is not None:
             self.rpc_server.register_function(self.require, 'require', 
+                                              prefix=self.prefix)
+            self.rpc_server.register_function(self.set_speed, 'set_speed',
+                                              prefix=self.prefix)
+            self.rpc_server.register_function(self.set_instance_speed, 
+                                              'set_instance_speed', 
                                               prefix=self.prefix)
         
     def load(self):

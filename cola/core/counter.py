@@ -109,7 +109,7 @@ class Counter(object):
                     if group not in self.container:
                         self.container[group] = {}
                     if item not in self.container[group]:
-                        self.container[group] = val
+                        self.container[group][item] = val
                     else:
                         self.container[group] = self.agg.merge_combiner(
                             self.container[group], val)

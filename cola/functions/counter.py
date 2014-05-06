@@ -112,12 +112,26 @@ class CounterClient(object):
     def global_inc(self, item, val=1):
         self.inc_counter.inc('global', item, val=val)
         
+    def get_local_inc(self, addr, instance_id, item, default_val=None):
+        addr = '#'.join((addr, str(instance_id)))
+        return self.inc_counter.get(addr, item, default_val=default_val)
+    
+    def get_global_inc(self, item, default_val=None):
+        return self.inc_counter.get('global', item, default_val=default_val)
+        
     def local_acc(self, addr, instance_id, item, val):
         addr = '#'.join((addr, str(instance_id)))
         self.acc_counter.inc(addr, item, val=val)
         
     def global_acc(self, item, val):
         self.acc_counter.inc('global', item, val=val)
+        
+    def get_local_acc(self, addr, instance_id, item, default_val=None):
+        addr = '#'.join((addr, str(instance_id)))
+        return self.acc_counter.get(addr, item, default_val=default_val)
+    
+    def get_global_acc(self, item, default_val=None):
+        return self.acc_counter.get('global', item, default_val=default_val)
         
     def sync(self):
         if self.remote:

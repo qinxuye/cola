@@ -111,8 +111,8 @@ class Counter(object):
                     if item not in self.container[group]:
                         self.container[group][item] = val
                     else:
-                        self.container[group] = self.agg.merge_combiner(
-                            self.container[group], val)
+                        self.container[group][item] = self.agg.merge_combiner(
+                            self.container[group][item], val)
                     
     def reset(self, container={}):
         with self.lock:

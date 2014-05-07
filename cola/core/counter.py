@@ -77,8 +77,8 @@ class OverwriteAggregator(Aggregator):
         return val
 
 class Counter(object):
-    def __init__(self, agg=AddAggregator(), container={}):
-        self.container = container
+    def __init__(self, agg=AddAggregator(), container=None):
+        self.container = container if container is not None else dict()
         self.agg = agg
         
         self.lock = threading.Lock()
@@ -114,6 +114,6 @@ class Counter(object):
                         self.container[group][item] = self.agg.merge_combiner(
                             self.container[group][item], val)
                     
-    def reset(self, container={}):
+    def reset(self, container=None):
         with self.lock:
-            self.container = container
+            self.container = container if container is not None else dict()

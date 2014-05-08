@@ -27,6 +27,7 @@ try:
     import cPickle as pickle
 except ImportError:
     import pickle
+from collections import defaultdict
 
 from cola.core.rpc import client_call
 from cola.core.utils import get_rpc_prefix
@@ -36,28 +37,29 @@ SPEED_CONTROL_STATUS_FILENAME = 'speed.control.status'
 
 TRACK_BANNED_SIZE = 3
 
+'''
+counter_server may look like:
+
+global inc counters:
+{
+    'global': {}
+    'ip1#inst1': {
+        'pages': x,
+        'secs': t # accumulate the time from opening a webpage to parsing finished
+    }
+}
+global acc counters:
+{
+    'ip1#inst1': {
+        'banned_start': [t1, t3, ...],
+        'banned_end': [t2, t4, ...],
+        'normal_start': [t5, t7, ...],
+        'normal_end' : [t6, t8, ...],
+        'normal_pages': [p1, p2, ...]
+    }
+}
+'''
 class SpeedControlServer(object):
-    '''
-    global inc counters:
-    {
-        'global': {}
-        'ip1#inst1': {
-            'pages': x,
-            'secs': t # accumulate the time from opening a webpage to parsing finished
-        }
-    }
-    global acc counters:
-    {
-        'ip1#inst1': {
-            'banned_start': [t1, t3, ...],
-            'banned_end': [t2, t4, ...],
-            'normal_start': [t5, t7, ...],
-            'normal_end' : [t6, t8, ...],
-            'normal_pages': [p1, p2, ...]
-        }
-    }
-    '''
-    
     def __init__(self, working_dir, settings, 
                  rpc_server=None, app_name=None,
                  counter_server=None, addrs=[]):
@@ -73,7 +75,7 @@ class SpeedControlServer(object):
         self.instance_speed = self.settings.job.speed.single
         self.limit = self.speed >= 0
         self.instance_limit = self.instance_speed >= 0
-        self.adaptive = self.settings.speed.adaptive
+        self.adaptive = self.settings.job.speed.adaptive
         
         self.lock = threading.Lock()
         
@@ -83,13 +85,15 @@ class SpeedControlServer(object):
         
         self.instance_page_secs = {}
         self.instance_calc_rates = {}
-        self.instance_curr_rates = {}
+        self.instance_curr_rates = defaultdict(lambda: 0)
         self.instance_spans = {}
         
         self.load()
         
-        self.stopped = False
+        self.stopped = threading.Event()
         self._register_rpc()
+        
+        self.rate_service_stated = False
         self._init_rate_service()
         
     def _register_rpc(self):
@@ -123,50 +127,59 @@ class SpeedControlServer(object):
                 t = (self.speed, self.instance_speed, self.adaptive, 
                     self.instance_page_secs, self.instance_calc_rates, self.instance_spans)
                 pickle.dump(t, f)
-        
+     
+    def _need_rate_service(self):
+        return self.limit or self.instance_limit or self.adaptive
+           
     def _init_rate_service(self):
         def clear():
-            self.reset()
-            self.calc_spans()
-            
-            for _ in range(10):
-                if not self.stopped:
-                    time.sleep(6)
+            stopped = self.stopped.wait(60)
+            if not stopped:
+                self.reset()
+                self.calc_spans()
                     
-            if not self.stopped:
+            if not self.stopped.is_set():
                 clear()
         
-        if self.limit or self.instance_limit or self.adaptive:
+        if self._need_rate_service() and \
+            not self.rate_service_stated:
+            self.rate_service_stated = True
             t = threading.Thread(target=clear)
             t.setDaemon(True)
             t.start()
         
     def shutdown(self):
-        self.stopped = True
+        self.stopped.set()
         self.save()
         
     def set_speed(self, speed):
         self.speed = speed
         self.limit = self.speed >= 0
+        self._init_rate_service()
         
     def set_instance_speed(self, speed):
         self.instance_speed = speed
         self.instance_limit = self.instance_speed >= 0
+        self._init_rate_service()
+        
+    def set_adaptive(self, adaptive):
+        self.adaptive = bool(adaptive)
+        self._init_rate_service()
         
     def _calc_page_secs(self):
         for instance in self.instances:
-            pages = self.counter_server.inc_counter.get(instance, 'pages')
-            secs = self.counter_server.inc_counter.get(instance, 'secs')
-            if pages and secs:
-                self.instance_page_secs[instance] = float(secs) / pages
+            if self.counter_server is not None:
+                pages = self.counter_server.inc_counter.get(instance, 'pages')
+                secs = self.counter_server.inc_counter.get(instance, 'secs')
+                if pages and secs:
+                    self.instance_page_secs[instance] = float(secs) / pages
         vals = self.instance_page_secs.values()
         if len(vals) > 0:
             min_sec = min(vals)
         else:
             min_sec = 0.1 # default 0.1 sec as the time of a page processing
         for instance in self.instances:
-            if self.instance_page_secs.get(instance, None) is None:
-                self.instance_page_secs[instance] = min_sec
+            self.instance_page_secs[instance] = min_sec
         
     def _calc_rate(self):
         for instance in self.instances:
@@ -174,6 +187,9 @@ class SpeedControlServer(object):
             if self.instance_limit:
                 self.instance_calc_rates[instance] = min(max_, 
                                                          self.instance_speed)
+            else:
+                self.instance_calc_rates[instance] = max_
+                
         sum_ = sum(self.instance_calc_rates.values())
         if self.limit and sum_ > self.speed:
             ratio = float(self.speed) / sum_
@@ -214,18 +230,18 @@ class SpeedControlServer(object):
             self._calc_page_secs()
             self._calc_rate()
         
-        if self.counter_server is None:
-            for instance in self.instances:
-                self.instance_spans[instance] = 0.0
-        else:
-            for instance in self.instances:
-                rate = self.instance_calc_rates[instance]
-                page_sec = self.instance_page_secs[instance]
-                if rate <= 0:
-                    self.instance_spans[instance] = 60.0
-                else:
-                    span = (60.0 - rate*page_sec) / rate
-                    self.instance_spans[instance] = max(span, 0.0)
+            if self.counter_server is None:
+                for instance in self.instances:
+                    self.instance_spans[instance] = 0.0
+            else:
+                for instance in self.instances:
+                    rate = self.instance_calc_rates[instance]
+                    page_sec = self.instance_page_secs[instance]
+                    if rate <= 0:
+                        self.instance_spans[instance] = 60.0
+                    else:
+                        span = (60.0 - rate*page_sec) / rate
+                        self.instance_spans[instance] = max(span, 0.0)
             
     def reset(self):
         with self.lock:
@@ -242,11 +258,10 @@ class SpeedControlServer(object):
         if addr not in self.instances:
             self.instances.append(addr)
             self.calc_spans()
-            return size, 0.0
         
         with self.lock:
             rest = self.instance_calc_rates[addr] - \
-                self.instance_curr_rates[addr]
+                self.instance_curr_rates[addr]            
             result = min(max(rest, 0), size)
             self.instance_curr_rates[addr] += result
             

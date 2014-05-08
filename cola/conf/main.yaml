@@ -15,6 +15,6 @@ job:
   speed: 
     max: -1  # to the cluster, -1 means no restrictions, if greater than 0, means webpages opened per minute.
     single: -1 # max restrictions to a single instance
-    adaptive: yes
+    adaptive: no
   instances: 1 # instances size of a single machine
   priorities: 3 # priorities queue count in mq

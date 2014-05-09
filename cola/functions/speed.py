@@ -21,7 +21,6 @@ Created on 2014-5-2
 '''
 
 import os
-import time
 import threading
 try:
     import cPickle as pickle
@@ -212,7 +211,7 @@ class SpeedControlServer(object):
                     for ban in banned:
                         nearest_nor = None
                         for nor in normal:
-                            if nor[1] < ban[0]:
+                            if nor[1] <= ban[0]:
                                 nearest_nor = nor
                                 break
                         if nearest_nor is not None:

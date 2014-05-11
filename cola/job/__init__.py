@@ -21,22 +21,24 @@ Created on 2013-5-26
 '''
 
 import re
+import hashlib
 
 from cola.core.errors import ConfigurationError
-from cola.job.settings import Settings
+from cola.core.utils import base58_encode
+from cola.context import Settings
 
 JOB_NAME_RE = re.compile(r'(\w| )+')
 
-class Job(object):
+class JobDescription(object):
     def __init__(self, name, url_patterns, opener_cls, starts,
                  is_bundle=False, unit_cls=str,
                  instances=1, debug=False, user_conf=None,
-                 login_hook=None):
+                 login_hook=None, **kw):
         self.name = name
-        self.real_name = self.name.replace(' ', '_')
-        
         if not JOB_NAME_RE.match(name):
             raise ConfigurationError('Job name can only contain alphabet, number and space.')
+        self.uniq_name = self._get_uniq_name(self.name)
+        
         self.url_patterns = url_patterns
         self.opener_cls = opener_cls
         self.starts = starts
@@ -48,11 +50,11 @@ class Job(object):
         self.user_conf = user_conf
         self.login_hook = login_hook
         
-        self.settings = Settings(user_conf=user_conf)
+        self.settings = Settings(user_conf=user_conf, **kw)
+        
+    def _get_uniq_name(self, name):
+        hash_val = hashlib.md5(name).hexdigest()[8:-8]
+        return base58_encode(int(hash_val, 16))
         
     def add_urlpattern(self, url_pattern):
         self.url_patterns += url_pattern
-        
-    def set_userconf(self, conf):
-        self.user_conf = conf
-        self.settings = Settings(user_conf=self.user_conf)

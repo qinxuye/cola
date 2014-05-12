@@ -15,12 +15,10 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Created on 2013-5-26
+Created on 2014-5-13
 
-@author: Chine
+@author: chine
 '''
 
-from cola.job.job import JobDescription, Job
-
-JobDescription = JobDescription
-Job = Job
+class Task(object):
+    pass

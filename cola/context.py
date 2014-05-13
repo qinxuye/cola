@@ -47,12 +47,14 @@ class Settings(object):
         for k in dicts:
             if not k.startswith('_'):
                 setattr(self, k, getattr(dicts, k))
+        self.values = dicts
                 
 class Context(object):
-    def __init__(self, is_master, master, is_client=False, 
-                 working_dir=None, mkdirs=False, addr=None, addrs=[]):
+    def __init__(self, is_master, master, local_mode=False, is_client=False, 
+                 working_dir=None, mkdirs=False, addr=None, addrs=None):
         self.is_master = is_master
         self.is_client = is_client
+        self.is_local_mode = local_mode
         
         self.working_dir = working_dir
         if self.working_dir is None:
@@ -73,3 +75,5 @@ class Context(object):
                 port = main_conf.worker.port
             self.addr = '%s:%s' % (self.addr, port)
         self.addrs = addrs
+        if self.addrs is None:
+            self.addrs = []

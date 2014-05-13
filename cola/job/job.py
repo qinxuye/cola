@@ -22,10 +22,12 @@ Created on 2014-5-12
 
 import re
 import hashlib
+import os
 import multiprocessing
 
 from cola.core.errors import ConfigurationError
 from cola.core.utils import base58_encode
+from cola.core.mq import MessageQueue
 from cola.context import Settings
 
 JOB_NAME_RE = re.compile(r'(\w| )+')
@@ -61,11 +63,15 @@ class JobDescription(object):
         self.url_patterns += url_pattern
         
 class Job(object):
-    def __init__(self, ctx, job_desc, mq, rpc_server=None):
+    def __init__(self, ctx, job_desc, rpc_server=None):
         self.ctx = ctx
         self.job_desc = job_desc
-        self.mq = mq
         self.rpc_server = rpc_server
+        self.job_name = self.job_desc.uniq_name
+        self.working_dir = os.path.join(self.ctx.working_dir, self.job_name)
         
         self.stopped = multiprocessing.Event()
         self.suspend = multiprocessing.Event()
+        
+    def init(self):
+        pass

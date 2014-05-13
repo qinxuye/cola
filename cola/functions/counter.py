@@ -21,6 +21,7 @@ Created on 2014-5-2
 '''
 
 import os
+import threading
 try:
     import cPickle as pickle
 except ImportError:
@@ -105,6 +106,8 @@ class CounterClient(object):
         self.inc_counter = Counter()
         self.acc_counter = Counter(agg=MergeAggregator())
         
+        self.lock = threading.Lock()
+        
     def local_inc(self, addr, instance_id, item, val=1):
         addr = '#'.join((addr, str(instance_id)))
         self.inc_counter.inc(addr, item, val=val)
@@ -126,6 +129,16 @@ class CounterClient(object):
     def global_acc(self, item, val):
         self.acc_counter.inc('global', item, val=val)
         
+    def multi_local_acc(self, addr, instance_id, items, vals):
+        with self.lock:
+            for item, val in zip(items, vals):
+                self.local_acc(addr, instance_id, item, val)
+                
+    def multi_global_acc(self, items, vals):
+        with self.lock:
+            for item, val in zip(items, vals):
+                self.global_acc(item, val)
+        
     def get_local_acc(self, addr, instance_id, item, default_val=None):
         addr = '#'.join((addr, str(instance_id)))
         return self.acc_counter.get(addr, item, default_val=default_val)
@@ -134,12 +147,13 @@ class CounterClient(object):
         return self.acc_counter.get('global', item, default_val=default_val)
         
     def sync(self):
-        if self.remote:
-            client_call(self.server, 'inc_merge', self.inc_counter.container)
-            client_call(self.server, 'acc_merge', self.acc_counter.container)
-        else:
-            self.server.inc_merge(self.inc_counter.container)
-            self.server.acc_merge(self.acc_counter.container)
-        self.inc_counter.reset()
-        self.acc_counter.reset()
+        with self.lock:
+            if self.remote:
+                client_call(self.server, 'inc_merge', self.inc_counter.container)
+                client_call(self.server, 'acc_merge', self.acc_counter.container)
+            else:
+                self.server.inc_merge(self.inc_counter.container)
+                self.server.acc_merge(self.acc_counter.container)
+            self.inc_counter.reset()
+            self.acc_counter.reset()
     

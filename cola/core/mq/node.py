@@ -26,6 +26,7 @@ try:
 except ImportError:
     import pickle
 from collections import defaultdict
+import socket
 
 from cola.core.rpc import client_call
 from cola.core.utils import get_rpc_prefix
@@ -191,7 +192,7 @@ class LocalMessageQueueNode(object):
 class MessageQueueNodeProxy(object):
     def __init__(self, base_dir, rpc_server, addr, addrs,
                  copies=1, n_priorities=3, deduper=None,
-                 app_name=None):
+                 app_name=None, logger=None):
         self.dir_ = base_dir
         self.addr_ = addr
         self.addrs = list(addrs)
@@ -200,6 +201,7 @@ class MessageQueueNodeProxy(object):
             copies=copies, n_priorities=n_priorities, deduper=deduper,
             app_name=app_name)
         self.distributor = Distributor(addrs, copies=copies)
+        self.logger = logger
         
         self.prefix = get_rpc_prefix(app_name, 'mq')
         
@@ -297,9 +299,13 @@ class MessageQueueNodeProxy(object):
             self.caches[addr].extend(objs)
             if not self.caches_inited[addr] or \
                 len(self.caches[addr]) >= CACHE_SIZE or flush:
-                self._remote_or_local_batch_put(addr, self.caches[addr])
-                
-                self.caches[addr] = []
+                try:
+                    self._remote_or_local_batch_put(addr, self.caches[addr])
+                except socket.error, e:
+                    if self.logger:
+                        self.logger.exception(e)
+                else:
+                    self.caches[addr] = []
                 
             if not self.caches_inited[addr]:
                 self.caches_inited[addr] = True
@@ -312,9 +318,14 @@ class MessageQueueNodeProxy(object):
                             self.backup_caches[addr].values()])
             if size >= CACHE_SIZE or flush:
                 for backup_addr, objs in self.backup_caches[addr].iteritems():
-                    self._remote_or_local_put_backup(
-                        addr, backup_addr, objs)
-                    self.backup_caches[addr][backup_addr] = []
+                    try:
+                        self._remote_or_local_put_backup(
+                            addr, backup_addr, objs)
+                    except socket.error, e:
+                        if self.logger:
+                            self.logger.exception(e)
+                    else:
+                        self.backup_caches[addr][backup_addr] = []
             
     def get(self, size=1, priority=0):
         self.init()
@@ -329,8 +340,14 @@ class MessageQueueNodeProxy(object):
             if left <= 0:
                 break
             
-            objs = self._remote_or_local_get(addr, size=left, 
-                                             priority=priority)
+            objs = None
+            try:
+                objs = self._remote_or_local_get(addr, size=left, 
+                                                 priority=priority)
+            except socket.error, e:
+                if self.logger:
+                    self.logger.exception(e)
+                    
             if objs is None:
                 continue
             if not isinstance(objs, list):

@@ -132,13 +132,11 @@ class SpeedControlServer(object):
            
     def _init_rate_service(self):
         def clear():
-            stopped = self.stopped.wait(60)
-            if not stopped:
-                self.reset()
-                self.calc_spans()
-                    
-            if not self.stopped.is_set():
-                clear()
+            while not self.stopped.is_set():
+                stopped = self.stopped.wait(60)
+                if not stopped:
+                    self.reset()
+                    self.calc_spans()
         
         if self._need_rate_service() and \
             not self.rate_service_stated:

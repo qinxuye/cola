@@ -21,6 +21,7 @@ Created on 2014-4-27
 '''
 
 import os
+import threading
 try:
     import cPickle as pickle
 except ImportError:
@@ -56,36 +57,38 @@ class LocalMessageQueueNode(object):
         self.copies = max(min(len(self.addrs)-1, copies), 0)
         self.n_priorities = max(n_priorities, 1)
         self.deduper = deduper
-        
         self.app_name = app_name
+        
+        self._lock = threading.Lock()
         
         self._register_rpc()
         
         self.inited = False
         
     def init(self):
-        if self.inited: return
-        
-        get_priority_store_dir = lambda priority: os.path.join(self.dir_, 
-                                    PRIORITY_STORE_FN, str(priority))
-        self.priority_stores = [Store(get_priority_store_dir(i), 
-                                      deduper=self.deduper,
-                                      mkdirs=True) \
-                                for i in range(self.n_priorities)]
-        
-
-        backup_store_dir = os.path.join(self.dir_, BACKUP_STORE_FN)
-        self.backup_stores = {}
-        for backup_addr in self.other_addrs:
-            backup_node_dir = backup_addr.replace(':', '_')
-            backup_path = os.path.join(backup_store_dir, backup_node_dir)
-            self.backup_stores[backup_addr] = Store(backup_path, 
-                                                   size=512*1024, mkdirs=True)
+        with self._lock:
+            if self.inited: return
             
-        inc_store_dir = os.path.join(self.dir_, INCR_STORE_FN)
-        self.inc_store = Store(inc_store_dir, mkdirs=True)
+            get_priority_store_dir = lambda priority: os.path.join(self.dir_, 
+                                        PRIORITY_STORE_FN, str(priority))
+            self.priority_stores = [Store(get_priority_store_dir(i), 
+                                          deduper=self.deduper,
+                                          mkdirs=True) \
+                                    for i in range(self.n_priorities)]
+            
+    
+            backup_store_dir = os.path.join(self.dir_, BACKUP_STORE_FN)
+            self.backup_stores = {}
+            for backup_addr in self.other_addrs:
+                backup_node_dir = backup_addr.replace(':', '_')
+                backup_path = os.path.join(backup_store_dir, backup_node_dir)
+                self.backup_stores[backup_addr] = Store(backup_path, 
+                                                       size=512*1024, mkdirs=True)
                 
-        self.inited = True
+            inc_store_dir = os.path.join(self.dir_, INCR_STORE_FN)
+            self.inc_store = Store(inc_store_dir, mkdirs=True)
+                    
+            self.inited = True
         
     def _register_rpc(self):
         if self.rpc_server:
@@ -205,24 +208,26 @@ class MessageQueueNodeProxy(object):
         
         self.prefix = get_rpc_prefix(app_name, 'mq')
         
+        self._lock = threading.Lock()
         self.inited = False
         
     def init(self):
-        if self.inited: return
-        
-        self.load()
-        if not hasattr(self, 'caches'):
-            self.caches = dict((addr, []) for addr in self.addrs)
-        if not hasattr(self, 'caches_inited'):
-            self.caches_inited = dict((addr, False) for addr in self.addrs)
-        if not hasattr(self, 'backup_caches'):
-            self.backup_caches = dict((addr, {}) for addr in self.addrs)
-            for addr in self.addrs:
-                for other_addr in [n for n in self.addrs if addr != n]:
-                    self.backup_caches[addr][other_addr] = []
+        with self._lock:
+            if self.inited: return
             
-        self.mq_node.init()
-        self.inited = True
+            self.load()
+            if not hasattr(self, 'caches'):
+                self.caches = dict((addr, []) for addr in self.addrs)
+            if not hasattr(self, 'caches_inited'):
+                self.caches_inited = dict((addr, False) for addr in self.addrs)
+            if not hasattr(self, 'backup_caches'):
+                self.backup_caches = dict((addr, {}) for addr in self.addrs)
+                for addr in self.addrs:
+                    for other_addr in [n for n in self.addrs if addr != n]:
+                        self.backup_caches[addr][other_addr] = []
+                
+            self.mq_node.init()
+            self.inited = True
         
     def load(self):
         save_file = os.path.join(self.dir_, MQ_STATUS_FILENAME)

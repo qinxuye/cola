@@ -96,36 +96,37 @@ class Store(object):
         self.inited = False
         
     def init(self):
-        if self.inited: return
-        
-        files = os.listdir(self.dir_)
-        for fi in files:
-            if fi == 'lock': continue
+        with self.lock:
+            if self.inited: return
             
-            file_path = os.path.join(self.dir_, fi)
-            if not os.path.isfile(file_path) or \
-                LEGAL_STORE_FILE_REGEX.match(fi) is None:
-                raise StoreNotSafetyShutdown('Store did not shutdown safety last time.')
-            else:
-                self.legal_files.append(file_path)
+            files = os.listdir(self.dir_)
+            for fi in files:
+                if fi == 'lock': continue
                 
-        self.legal_files = sorted(self.legal_files, key=lambda k: int(os.path.basename(k)))
-        
-        if len(self.legal_files) > 0:
-            read_file_handle = self.file_handles[READ_ENTRANCE] \
-                = open(self.legal_files[-1], 'r+')
-            self.map_handles[READ_ENTRANCE] = mmap.mmap(read_file_handle.fileno(), 
-                                                        self.store_file_size)
-            if len(self.legal_files) == 1:
-                self.file_handles[WRITE_ENTRANCE] = self.file_handles[READ_ENTRANCE]
-                self.map_handles[WRITE_ENTRANCE] = self.map_handles[READ_ENTRANCE]
-            else:
-                write_file_handle = self.file_handles[WRITE_ENTRANCE] \
-                    = open(self.legal_files[0], 'r+')
-                self.map_handles[WRITE_ENTRANCE] = mmap.mmap(write_file_handle.fileno(),
-                                                             self.store_file_size)
-                
-        self.inited = True
+                file_path = os.path.join(self.dir_, fi)
+                if not os.path.isfile(file_path) or \
+                    LEGAL_STORE_FILE_REGEX.match(fi) is None:
+                    raise StoreNotSafetyShutdown('Store did not shutdown safety last time.')
+                else:
+                    self.legal_files.append(file_path)
+                    
+            self.legal_files = sorted(self.legal_files, key=lambda k: int(os.path.basename(k)))
+            
+            if len(self.legal_files) > 0:
+                read_file_handle = self.file_handles[READ_ENTRANCE] \
+                    = open(self.legal_files[-1], 'r+')
+                self.map_handles[READ_ENTRANCE] = mmap.mmap(read_file_handle.fileno(), 
+                                                            self.store_file_size)
+                if len(self.legal_files) == 1:
+                    self.file_handles[WRITE_ENTRANCE] = self.file_handles[READ_ENTRANCE]
+                    self.map_handles[WRITE_ENTRANCE] = self.map_handles[READ_ENTRANCE]
+                else:
+                    write_file_handle = self.file_handles[WRITE_ENTRANCE] \
+                        = open(self.legal_files[0], 'r+')
+                    self.map_handles[WRITE_ENTRANCE] = mmap.mmap(write_file_handle.fileno(),
+                                                                 self.store_file_size)
+                    
+            self.inited = True
     
     def _generate_file(self):
         prev = None

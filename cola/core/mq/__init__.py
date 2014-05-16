@@ -20,8 +20,14 @@ Created on 2013-5-23
 @author: Chine
 '''
 
+import multiprocessing
+import Queue
+import threading
+
 from cola.core.mq.node import MessageQueueNodeProxy
 from cola.core.mq.client import MessageQueueClient
+
+PUT, GET = range(2)
 
 MessageQueueClient = MessageQueueClient
 
@@ -32,3 +38,87 @@ class MessageQueue(MessageQueueNodeProxy):
         super(MessageQueue, self).__init__(working_dir, rpc_server, addr, addrs,
                                            copies=copies, n_priorities=n_priorities,
                                            deduper=deduper, app_name=app_name)
+
+class MpMessageQueue(MessageQueueNodeProxy):
+    def __init__(self, working_dir, rpc_server, addr, addrs, 
+                 instances=1, app_name=None, copies=1, 
+                 n_priorities=3, deduper=None):
+        super(MpMessageQueue, self).__init__(
+                working_dir, rpc_server, addr, addrs,
+                copies=copies, n_priorities=n_priorities,
+                deduper=deduper, app_name=app_name)
+        self.manager = multiprocessing.Manager()
+        self.stopped = self.manager.Event()
+        
+        self.kw = {}
+        
+        self.kw['stopped'] = self.stopped
+        self.kw['clients'] = []
+        
+        self.threads = []
+        for _ in range(instances):
+            agent, client = multiprocessing.Pipe()
+            self.kw['clients'].append(client)
+            t = threading.Thread(target=self._init_agent, args=(agent, ))
+            t.setDaemon(True)
+            self.threads.append(t)
+            t.start()
+         
+    def _init_agent(self, agent):
+        while not self.stopped.is_set():
+            need_process = agent.poll(10)
+            if self.stopped.is_set():
+                return
+            if not need_process:
+                continue
+            
+            action, data = agent.recv()
+            if action == PUT:
+                objs, flush = data
+                self.put(objs, flush=flush)
+                agent.send(1)
+            else:
+                size, priority = data
+                agent.send(self.get(size=size, 
+                                    priority=priority))
+                
+    def shutdown(self):
+        self.stopped.set()
+        
+    def join(self):
+        for t in self.threads:
+            t.join()
+        
+class MpMessageQueueClient(object):
+    def __init__(self, instance_id, kw):
+        for k, v in kw.iteritems():
+            setattr(self, k, v)
+        self.client = self.clients[instance_id]
+        
+    def put(self, objs, flush=False):
+        if self.stopped.is_set():
+            return
+        self.client.send((PUT, (objs, flush)))
+        while not self.stopped.is_set():
+            need_process = self.client.poll(10)
+            if self.stopped.is_set():
+                return
+            if not need_process:
+                continue
+            
+            self.client.recv()
+            return
+        
+    def get(self, size=1, priority=0):
+        if self.stopped.is_set():
+            return
+        self.client.send((GET, (size, priority)))
+        while not self.stopped.is_set():
+            need_process = self.client.poll(10)
+            if self.stopped.is_set():
+                return
+            if not need_process:
+                continue
+            
+            return self.client.recv()
+            

@@ -21,13 +21,12 @@ Created on 2013-5-23
 '''
 
 import multiprocessing
-import Queue
 import threading
 
 from cola.core.mq.node import MessageQueueNodeProxy
 from cola.core.mq.client import MessageQueueClient
 
-PUT, GET = range(2)
+PUT, PUT_INC, GET, GET_INC, VERIFY = range(5)
 
 MessageQueueClient = MessageQueueClient
 
@@ -77,10 +76,22 @@ class MpMessageQueue(MessageQueueNodeProxy):
                 objs, flush = data
                 self.put(objs, flush=flush)
                 agent.send(1)
-            else:
+            elif action == PUT_INC:
+                self.put_inc(data)
+                agent.send(1)
+            elif action == GET:
                 size, priority = data
                 agent.send(self.get(size=size, 
                                     priority=priority))
+            elif action == GET_INC:
+                agent.send(self.get_inc(data))
+            elif action == VERIFY:
+                if not self.mq_node.deduper:
+                    agent.send(False)
+                else:
+                    agent.send(self.mq_node.deduper.exist(str(data)))
+            else:
+                raise ValueError('mq client can only put, put_inc, and get')
                 
     def shutdown(self):
         self.stopped.set()
@@ -95,10 +106,13 @@ class MpMessageQueueClient(object):
             setattr(self, k, v)
         self.client = self.clients[instance_id]
         
-    def put(self, objs, flush=False):
+    def put(self, objs, flush=False, inc=False):
         if self.stopped.is_set():
             return
-        self.client.send((PUT, (objs, flush)))
+        if not inc:
+            self.client.send((PUT, (objs, flush)))
+        else:
+            self.client.send((PUT_INC, objs))
         while not self.stopped.is_set():
             need_process = self.client.poll(10)
             if self.stopped.is_set():
@@ -109,10 +123,13 @@ class MpMessageQueueClient(object):
             self.client.recv()
             return
         
-    def get(self, size=1, priority=0):
+    def get(self, size=1, priority=0, inc=False):
         if self.stopped.is_set():
             return
-        self.client.send((GET, (size, priority)))
+        if not inc:
+            self.client.send((GET, (size, priority)))
+        else:
+            self.client.send((GET_INC, size))
         while not self.stopped.is_set():
             need_process = self.client.poll(10)
             if self.stopped.is_set():
@@ -122,3 +139,17 @@ class MpMessageQueueClient(object):
             
             return self.client.recv()
             
+    def verify(self, obj):
+        if self.stopped.is_set():
+            return False
+        self.client.send((VERIFY, str(obj)))
+        while not self.stopped.is_set():
+            need_process = self.client.poll(10)
+            if self.stopped.is_set():
+                return False
+            if not need_process:
+                continue
+                
+            return self.client.recv()
+        
+        return False

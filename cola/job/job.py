@@ -26,17 +26,14 @@ import os
 import multiprocessing
 
 from cola.core.errors import ConfigurationError
-from cola.core.utils import base58_encode
-from cola.core.mq import MessageQueue
+from cola.core.utils import base58_encode, get_cpu_count
 from cola.context import Settings
 
 JOB_NAME_RE = re.compile(r'(\w| )+')
 
 class JobDescription(object):
-    def __init__(self, name, url_patterns, opener_cls, starts,
-                 is_bundle=False, unit_cls=str,
-                 instances=1, debug=False, user_conf=None,
-                 login_hook=None, **kw):
+    def __init__(self, name, url_patterns, opener_cls, user_conf, starts,
+                 debug=False, login_hook=None, **kw):
         self.name = name
         if not JOB_NAME_RE.match(name):
             raise ConfigurationError('Job name can only contain alphabet, number and space.')
@@ -44,13 +41,10 @@ class JobDescription(object):
         
         self.url_patterns = url_patterns
         self.opener_cls = opener_cls
-        self.starts = starts
         
-        self.is_bundle = is_bundle
-        self.unit_cls = unit_cls
-        self.instances = instances
         self.debug = debug
         self.user_conf = user_conf
+        self.starts = starts
         self.login_hook = login_hook
         
         self.settings = Settings(user_conf=user_conf, **kw)
@@ -63,15 +57,18 @@ class JobDescription(object):
         self.url_patterns += url_pattern
         
 class Job(object):
-    def __init__(self, ctx, job_desc, rpc_server=None):
+    def __init__(self, ctx, job_dir, rpc_server=None):
         self.ctx = ctx
-        self.job_desc = job_desc
+        self.job_dir = job_dir
         self.rpc_server = rpc_server
         self.job_name = self.job_desc.uniq_name
         self.working_dir = os.path.join(self.ctx.working_dir, self.job_name)
         
         self.stopped = multiprocessing.Event()
-        self.suspend = multiprocessing.Event()
+        self.nonsuspend = multiprocessing.Event()
+        self.nonsuspend.set()
+        
+        self.n_containers = get_cpu_count()
         
     def init(self):
         pass

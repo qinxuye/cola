@@ -365,6 +365,12 @@ class MessageQueueNodeProxy(object):
             return results[0]
         return results
     
+    def put_inc(self, objs):
+        self.mq_node.put_inc(objs)
+        
+    def get_inc(self, size=1):
+        self.mq_node.get_inc(size=size)
+    
     def flush(self):
         self.put([], flush=True)
     

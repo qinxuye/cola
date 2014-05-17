@@ -19,3 +19,4 @@ job:
   instances: 1 # instances size of a single machine
   priorities: 3 # priorities queue count in mq
   copies: 1 # redundant size of objects in mq
+  inc: yes

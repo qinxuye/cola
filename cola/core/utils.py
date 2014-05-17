@@ -24,6 +24,7 @@ import socket
 import os
 import sys
 import urllib
+import multiprocessing
 
 from cola.core.errors import DependencyNotInstalledError
 
@@ -133,3 +134,6 @@ def base58_encode(num, alphabet=ALPHABET):
         arr.append(alphabet[rem])
     arr.reverse()
     return ''.join(arr)
+
+def get_cpu_count():
+    return multiprocessing.cpu_count()

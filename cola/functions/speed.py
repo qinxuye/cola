@@ -30,6 +30,7 @@ from collections import defaultdict
 
 from cola.core.rpc import client_call
 from cola.core.utils import get_rpc_prefix
+from cola.functions import MpFunctionServer
 
 FUNC_PREFIX = 'speed_control_'
 SPEED_CONTROL_STATUS_FILENAME = 'speed.control.status'
@@ -263,13 +264,18 @@ class SpeedControlServer(object):
             self.instance_curr_rates[addr] += result
             
         return result, self.instance_spans[addr]
+
+class MpSpeedControlServer(SpeedControlServer, MpFunctionServer):
+    def __init__(self, working_dir, settings, instances, stopped,
+                 rpc_server=None, app_name=None,
+                 counter_server=None, addrs=[]):
+        SpeedControlServer.__init__(self, working_dir, settings, 
+                                    rpc_server=rpc_server, app_name=app_name, 
+                                    counter_server=counter_server, addrs=addrs)
+        MpFunctionServer.__init__(self, instances, stopped)
     
 class SpeedControlClient(object):
     def __init__(self, server, addr, instance_id, app_name=None):
-        if isinstance(server, SpeedControlServer):
-            self.remote = False
-        else:
-            self.remote = True
         self.server = server
         self.addr = addr
         self.instance_id = instance_id
@@ -277,9 +283,12 @@ class SpeedControlClient(object):
         self.prefix = get_rpc_prefix(self.app_name, FUNC_PREFIX)
         
     def require(self, size=1):
-        if self.remote:
+        if isinstance(self.server, basestring):
             return client_call(self.server, 'require', self.addr, 
                                self.instance_id, size)
-        else:
+        elif isinstance(self.server, SpeedControlServer):
             return self.server.require(self.addr, self.instance_id, 
                                        size=size)
+        else:
+            self.server.send('require', (self.addr, self.instance_id, size))
+            return self.server.recv()

@@ -29,6 +29,7 @@ except ImportError:
 
 from cola.core.utils import get_rpc_prefix
 from cola.core.rpc import client_call
+from cola.functions import MpFunctionServer
 
 FUNC_PREFIX = "budget_apply_"
 
@@ -147,20 +148,27 @@ class BudgetApplyServer(object):
         self.applied = max(self.applied, self.finished)
         self.set_status()
         
+class MpBudgetApplyServer(BudgetApplyServer, MpFunctionServer):
+    def __init__(self, working_dir, settings, instances,
+                 stopped, rpc_server=None, app_name=None):
+        MpBudgetApplyServer.__init__(self,
+            working_dir, settings,
+            rpc_server=rpc_server, app_name=app_name)
+        MpFunctionServer.__init__(self, instances, stopped)
+        
 class BudgetApplyClient(object):
     def __init__(self, server, app_name=None):
-        if isinstance(server, BudgetApplyServer):
-            self.remote = False
-        else:
-            self.remote = True
         self.server = server
         self.prefix = get_rpc_prefix(app_name, FUNC_PREFIX)
         
     def _call(self, func, *args):
-        if self.remote:
+        if isinstance(self.server, BudgetApplyServer):
+            return getattr(self.server, func)(*args)
+        elif isinstance(self.server, basestring):
             return client_call(self.server, self.prefix+func, *args)
         else:
-            return getattr(self.server, func)(*args) 
+            self.server.send(func, args)
+            return self.server.recv()
         
     def apply(self, budget):
         return self._call('apply', budget)

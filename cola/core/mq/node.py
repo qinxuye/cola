@@ -101,6 +101,8 @@ class LocalMessageQueueNode(object):
                                               prefix=prefix)
             self.rpc_server.register_function(self.get_proxy, name='get',
                                               prefix=prefix)
+            self.rpc_server.register_function(self.verify, name='verify',
+                                              prefix=prefix)
         
     def put(self, objs, force=False, priority=0):
         self.init()
@@ -183,6 +185,11 @@ class LocalMessageQueueNode(object):
         self.addrs.remove(addr)
         self.backup_stores[addr].shutdown()
         del self.backup_stores[addr]
+        
+    def verify(self, obj):
+        if self.deduper:
+            return self.deduper.exist(str(obj))
+        return True
     
     def shutdown(self):
         if not self.inited: return
@@ -417,6 +424,9 @@ class MessageQueueNodeProxy(object):
             objs = self.mq_node.get_backup(addr, size=BATCH_SIZE)
         
         self.mq_node.remove_node(addr)
+        
+    def verify(self, obj):
+        return self.mq_node.verify(obj)
     
     def shutdown(self):
         if not self.inited: return

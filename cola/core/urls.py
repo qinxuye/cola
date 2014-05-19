@@ -69,3 +69,5 @@ class UrlPatterns(object):
                 if options is True:
                     return pattern.parser, pattern.options
                 return pattern.parser
+        if options:
+            return None, {}

@@ -20,3 +20,4 @@ job:
   priorities: 3 # priorities queue count in mq
   copies: 1 # redundant size of objects in mq
   inc: yes
+  shuffle: no # only work in bundle mode, means the urls in a bundle will shuffle before fetching

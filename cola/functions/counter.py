@@ -130,6 +130,16 @@ class CounterClient(object):
     
     def get_global_inc(self, item, default_val=None):
         return self.inc_counter.get('global', item, default_val=default_val)
+    
+    def multi_local_inc(self, addr, instance_id, items, vals):
+        with self.lock:
+            for item, val in zip(items, vals):
+                self.local_inc(addr, instance_id, item, val=val)
+                
+    def multi_global_inc(self, item, vals):
+        with self.lock:
+            for item, val in zip(item, vals):
+                self.global_inc(item, val)
         
     def local_acc(self, addr, instance_id, item, val):
         addr = '#'.join((addr, str(instance_id)))

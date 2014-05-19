@@ -32,3 +32,5 @@ class ConfigurationError(Exception): pass
 class LoginFailure(Exception): pass
 
 class FetchBannedError(Exception): pass
+
+class NetworkError(Exception): pass

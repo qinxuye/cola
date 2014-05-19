@@ -25,6 +25,7 @@ import os
 import sys
 import urllib
 import multiprocessing
+import time
 
 from cola.core.errors import DependencyNotInstalledError
 
@@ -137,3 +138,26 @@ def base58_encode(num, alphabet=ALPHABET):
 
 def get_cpu_count():
     return multiprocessing.cpu_count()
+
+class Clock(object):
+    def __init__(self, start=None):
+        self.start = start
+        if self.start is None:
+            self.start = time.time()
+            
+        self.paused = 0.0
+        self.is_paused = False
+        self.acc_paused = 0.0
+            
+    def pause(self):
+        if not self.is_paused:
+            self.paused = time.time()
+            self.is_paused = True
+        
+    def resume(self):
+        if self.is_paused:
+            self.acc_paused += time.time() - self.paused
+            self.is_paused = False
+        
+    def clock(self):
+        return time.time() - self.start - self.acc_paused

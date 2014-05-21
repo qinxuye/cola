@@ -238,6 +238,8 @@ class BundleExecutor(Executor):
             self._handle_error(bundle, url, e, pack=False)
         except Exception, e:
             self._handle_error(bundle, url, e)
+            
+        return [], []
         
     def execute(self, bundle, max_sec):
         self.clock = Clock()

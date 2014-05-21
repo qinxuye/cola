@@ -32,7 +32,7 @@ from cola.context import Settings
 JOB_NAME_RE = re.compile(r'(\w| )+')
 
 class JobDescription(object):
-    def __init__(self, name, url_patterns, opener_cls, user_conf, starts,
+    def __init__(self, name, url_patterns, opener_cls, user_conf, starts, unit_cls,
                  debug=False, login_hook=None, **kw):
         self.name = name
         if not JOB_NAME_RE.match(name):
@@ -45,6 +45,7 @@ class JobDescription(object):
         self.debug = debug
         self.user_conf = user_conf
         self.starts = starts
+        self.unit_cls = unit_cls
         self.login_hook = login_hook
         
         self.settings = Settings(user_conf=user_conf, **kw)

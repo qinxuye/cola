@@ -13,7 +13,7 @@ job:
   mode: url # also can be `bundle`
   size: -1   # the destination (including bundle or url) size, -1 means not limited
   speed: 
-    max: -1  # to the cluster, -1 means no restrictions, if greater than 0, means webpages opened per minute.
+    max: -1  # to the cluster, -1 means no restrictions, if greater than 0, means webpages opened per minute
     single: -1 # max restrictions to a single instance
     adaptive: no
   instances: 1 # instances size of a single machine
@@ -21,3 +21,12 @@ job:
   copies: 1 # redundant size of objects in mq
   inc: yes
   shuffle: no # only work in bundle mode, means the urls in a bundle will shuffle before fetching
+  error:
+    network:
+      retries: -1 # 0 means no retry, -1 means keeping on trying
+      span: 20 # seconds span to retry
+      ignore: no # only work under bundle mode, if True will ignore this url and move to the next after several tries, or move to the next bundle
+    server: # like 404 or 500 error returned by server
+      retries: 5
+      span: 10
+      ignore: no

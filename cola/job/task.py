@@ -28,6 +28,7 @@ except ImportError:
     import pickle
 
 from cola.job.executor import UrlExecutor, BundleExecutor
+from cola.core.utils import Clock
 
 MAX_RUNNING_SECONDS = 10 * 60 # max seconds for a unit in some mq to run
 MAX_BUNDLE_RUNNING_SECONDS = 2 * 60  # max seconds for a bundle to run
@@ -95,8 +96,8 @@ class Task(object):
         self.executor.login()
         if self.task_id < len(self.job_desc.starts):
             start = self.job_desc.starts[self.task_id]
-            if not self.mq.verify(start):
-                self.priorities_objs[0].append(start)
+            if not self.mq.exist(start):
+                self.priorities_objs[0].append(self.job_desc.unit_cls(start))
         
     def _get_unit(self, priority, runnings):
         if len(self.priorities_objs[priority]) > 0:
@@ -117,18 +118,17 @@ class Task(object):
                     break
                 
                 last = self.priorities_secs[curr_priority]
-                start = time.time()
+                clock = Clock()
                 runnings = []
                 try:
                     while not self.stopped.is_set():
-                        curr = time.time()
-                        if curr - start >= last:
+                        if clock.clock() >= last:
                             break
                         self._get_unit(curr_priority, runnings)
                         if len(runnings) == 0:
                             break
                         if self.is_bundle:
-                            rest = min(last - (curr - start), MAX_BUNDLE_RUNNING_SECONDS)
+                            rest = min(last - clock.clock(), MAX_BUNDLE_RUNNING_SECONDS)
                             obj = self.executor.execute(runnings.pop(), rest)
                         else:
                             obj = self.executor.execute(runnings.pop())

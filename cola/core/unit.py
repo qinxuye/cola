@@ -52,6 +52,9 @@ class Bundle(Unit):
                                      priority=priority)
         self.label = label
         
+        self.error_urls = []
+        self.current_urls = []
+        
     def urls(self):
         raise NotImplementedError
     

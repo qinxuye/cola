@@ -26,7 +26,7 @@ import threading
 from cola.core.mq.node import MessageQueueNodeProxy
 from cola.core.mq.client import MessageQueueClient
 
-PUT, PUT_INC, GET, GET_INC, VERIFY = range(5)
+PUT, PUT_INC, GET, GET_INC, EXIST = range(5)
 
 MessageQueueClient = MessageQueueClient
 
@@ -85,11 +85,11 @@ class MpMessageQueue(MessageQueueNodeProxy):
                                     priority=priority))
             elif action == GET_INC:
                 agent.send(self.get_inc(data))
-            elif action == VERIFY:
+            elif action == EXIST:
                 if not self.mq_node.deduper:
                     agent.send(False)
                 else:
-                    agent.send(self.mq_node.deduper.exist(str(data)))
+                    agent.send(self.exist(str(data)))
             else:
                 raise ValueError('mq client can only put, put_inc, and get')
                 
@@ -139,10 +139,10 @@ class MpMessageQueueClient(object):
             
             return self.client.recv()
             
-    def verify(self, obj):
+    def exist(self, obj):
         if self.stopped.is_set():
             return False
-        self.client.send((VERIFY, str(obj)))
+        self.client.send((EXIST, str(obj)))
         while not self.stopped.is_set():
             need_process = self.client.poll(10)
             if self.stopped.is_set():

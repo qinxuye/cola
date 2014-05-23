@@ -20,7 +20,6 @@ Created on 2014-5-13
 @author: chine
 '''
 
-import time
 import os
 try:
     import cPickle as pickle
@@ -40,7 +39,7 @@ class Task(object):
                  mq, stopped, nonsuspend, 
                  counter_client, budget_client, speed_client,
                  is_local=False, logger=None, info_logger=None,
-                 job_name=None):
+                 env=None, job_name=None):
         self.dir_ = working_dir
         self.job_desc = job_desc
         self.settings = job_desc.settings
@@ -72,7 +71,7 @@ class Task(object):
         self.executor = executor_cls(self.job_desc,
             self.mq, self.dir_, self.stopped, self.nonsuspend, 
             self.budget_client, self.speed_client, 
-            self.counter_client, logger=self.logger,
+            self.counter_client, env=env, logger=self.logger,
             info_logger=self.info_logger)
         
         self.prepare()

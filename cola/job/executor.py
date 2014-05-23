@@ -25,11 +25,12 @@ import traceback
 import hashlib
 import os
 import random
+import time
 
 from cola.core.unit import Bundle
 from cola.core.errors import ConfigurationError, LoginFailure, \
                                 ServerError, NetworkError, FetchBannedError
-from cola.core.utils import Clock
+from cola.core.utils import Clock, get_ip
 
 ERROR_MSG_FILENAME = 'error.message'
 ERROR_CONTENT_FILENAME = 'error.content.html'
@@ -37,15 +38,17 @@ ERROR_CONTENT_FILENAME = 'error.content.html'
 DEFAULT_ERROR_SLEEP_SEC = 20
 DEFAULT_ERROR_RETRY_TIMES = 15
 DEFAULT_ERROR_IGNORE = False
+DEFAULT_SPEEED_REQUIRE_SIZE = 5
 
 class BundleInterrupt(Exception): pass
 
 class Executor(object):
-    def __init__(self, job_desc, mq,  
+    def __init__(self, job_desc, id_, mq, 
                  working_dir, stopped, nonsuspend, 
                  budget_client, speed_client, counter_client, 
-                 logger=None, info_logger=None):
+                 env=None, logger=None, info_logger=None):
         self.job_desc = job_desc
+        self.id_ = id_
         self.opener = job_desc.opener_cls()
         self.mq = mq
         self.dir_ = working_dir
@@ -58,8 +61,19 @@ class Executor(object):
         self.speed_client = speed_client
         self.counter_client = counter_client
         
+        if env is None:
+            env = {}
+        self.env = env
+        self.ip = env.get('ip') or get_ip()
+            
         self.logger = logger
         self.info_logger = info_logger
+        
+        # used for tracking if banned
+        self.is_normal = True
+        self.normal_start = time.time()
+        self.normal_pages = 0
+        self.banned_start = None
         
     def execute(self):
         raise NotImplementedError
@@ -153,14 +167,51 @@ class Executor(object):
         return retries, span, ignore
     
     def _handle_fetch_banned(self):
-        # need to fix
-        raise
+        self.clear_and_relogin()
+        # http proxies
+        
+    def _finish(self):
+        self.budge_client.finish()
+        self.counter_client.local_inc(self.ip, self.id_,
+                                      'finishes', 1)
+        self.counter_client.global_inc('finishes', 1)
+        
+    def _error(self):
+        self.budge_client.error()
+        self.counter_client.local_inc(self.ip, self.id_, 
+                                      'errors', 1)
+        self.counter_client.global_inc('errors', 1)
+        
+    def _got_banned(self):
+        if self.is_normal:
+            self.is_normal = False
+            self.normal_pages = 0
+            curr = time.time()
+            kw = {'normal_start': self.normal_start, 
+                  'normal_end': curr,
+                  'normal_pages': self.normal_pages}
+            self.banned_start = curr
+            self.counter_client.multi_local_acc(self.ip, self.id_, **kw)
+            
+    def _recover_normal(self):
+        if not self.is_normal:
+            self.is_normal = True
+            curr = time.time()
+            kw = {'banned_start': self.banned_start, 
+                  'banned_end': curr}
+            self.normal_start = curr
+            self.counter_client.multi_local_acc(self.ip, self.id_, **kw)
+        self.normal_pages += 1
 
 class UrlExecutor(Executor):
     def execute(self, url):
         pass
 
 class BundleExecutor(Executor):
+    def __init__(self, *args, **kwargs):
+        super(BundleExecutor, self).__init__(*args, **kwargs)
+        self.shuffle_urls = self.settings.job.shuffle
+    
     def _parse(self, parser_cls, options, bundle, url):
         if hasattr(self.opener, 'content'):
             del self.opener.content
@@ -183,8 +234,16 @@ class BundleExecutor(Executor):
     def _log_error(self, bundle, url, e):
         if self.logger:
             self.logger.exception(e)
-        bundle.error_times = getattr(bundle, 'error_times', 0) + 1
-        bundle.error_url = url
+        if url == getattr(bundle, 'error_url', None):
+            bundle.error_times = getattr(bundle, 'error_times', 0) + 1
+        else:
+            bundle.error_times = 0
+            bundle.error_url = url
+            
+        self.counter_client.local_inc(self.ip, self.id_, 
+                                      'error_urls', 1)
+        self.counter_client.global_inc('error_urls', 1)
+        
 
     def _handle_error(self, bundle, url, e, pack=True):
         # pause clock
@@ -211,6 +270,7 @@ class BundleExecutor(Executor):
                 return
             else:
                 bundle.current_urls.insert(0, url)
+                self._error()
                 raise BundleInterrupt
         finally:
             self.clock.resume()
@@ -224,14 +284,26 @@ class BundleExecutor(Executor):
     def _parse_with_process_exception(self, parser_cls, options, 
                                       bundle, url):
         try:
+            clock = Clock()
+            
             res = self._parse(parser_cls, options, bundle, url)
+            
+            t = clock.clock()
+            kw = {'pages': 1, 'secs': t}
+            self.counter_client.multi_local_inc(self.ip, self.id_, **kw)
+            self.counter_client.multi_global_inc(**kw)
+            
             self._clear_error(bundle)
+            self._recover_normal()
+            
             return res
         except LoginFailure, e:
             self._handle_error(bundle, url, e)
             self.clear_and_relogin()
         except FetchBannedError, e:
             self._handle_error(bundle, url, e)
+            self._got_banned()
+            self._handle_fetch_banned()
         except ServerError, e:
             self._handle_error(bundle, url, e)
         except NetworkError, e:
@@ -242,6 +314,7 @@ class BundleExecutor(Executor):
         return [], []
         
     def execute(self, bundle, max_sec):
+        failed = False
         self.clock = Clock()
         time_exceed = lambda: self.clock.clock() >= max_sec
         
@@ -249,29 +322,63 @@ class BundleExecutor(Executor):
                                     or bundle.urls()
         bundle.current_urls.extend(getattr(bundle, 'error_urls', []))
         
-        while len(bundle.current_urls) > 0 and not time_exceed():
+        while not self.stopped.is_set() and len(bundle.current_urls) > 0 \
+            and not time_exceed():
+            
+            while not self.nonsuspend.wait(5):
+                continue
+            if self.stopped.is_set():
+                break
+            
             url = bundle.current_urls.pop(0)
             if self.info_logger:
                 self.info_logger.info('get %s url: %s' % 
                                       (bundle.label, url))
             
+            rates = 0
+            span = 0.0
             parser_cls, options = self.job.url_patterns.get_parser(url, options=True)
             if parser_cls is not None:
-                self.loader._require_budget()
-                self.loader.pages_size += 1
+                if self.budge_client.apply(1) == 0:
+                    if self.stopped.wait(5):
+                        break
                 
-                next_urls, bundles = self._parse_with_process_exception(
-                    parser_cls, options, bundle, url)
-                next_urls = list(self.job_desc.url_patterns.matches(next_urls))
-                next_urls.extend(bundle.current_urls)
-                bundle.current_urls = next_urls
-                if bundles:
-                    self.mq.put(bundles)
-                if hasattr(self.opener, 'close'):
-                    self.opener.close()
+                if rates == 0:
+                    rates, span = self.speed_client.require(
+                        DEFAULT_SPEEED_REQUIRE_SIZE)
+                if rates == 0:
+                    if self.stopped.wait(5):
+                        break
+                
+                try:
+                    next_urls, bundles = self._parse_with_process_exception(
+                        parser_cls, options, bundle, url)
+                    next_urls = list(self.job_desc.url_patterns.matches(next_urls))
+                    next_urls.extend(bundle.current_urls)
+                    if self.shuffle_urls:
+                        if len(next_urls) > 0 and next_urls[0] == url:
+                            next_urls = next_urls[1:]
+                            random.shuffle(next_urls)
+                            next_urls.insert(0, url)
+                        else:
+                            random.shuffle(next_urls)
+                    bundle.current_urls = next_urls
+                    
+                    if bundles:
+                        self.mq.put(bundles)
+                    if hasattr(self.opener, 'close'):
+                        self.opener.close()
+                        
+                    if self.stopped.wait(span):
+                        break
+                except BundleInterrupt:
+                    failed = True
+                    break
         
-        if len(bundle.current_urls) == 0:
-            if self.job_desc.settings.job.inc == True:
+        if len(bundle.current_urls) == 0 or failed:
+            if not failed:
+                self._finish()
+            if self.settings.job.inc == True:
                 self.mq.put_inc(bundle)
         else:
             return bundle

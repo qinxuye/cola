@@ -77,3 +77,6 @@ class Context(object):
         self.addrs = addrs
         if self.addrs is None:
             self.addrs = []
+            
+        self.env = {'ip': self.addr.split(':')[0], 
+                    'root': self.working_dir}

@@ -28,6 +28,7 @@ except ImportError:
 
 from cola.job.executor import UrlExecutor, BundleExecutor
 from cola.core.utils import Clock
+from cola.core.unit import Url
 
 MAX_RUNNING_SECONDS = 10 * 60 # max seconds for a unit in some mq to run
 MAX_BUNDLE_RUNNING_SECONDS = 2 * 60  # max seconds for a bundle to run
@@ -130,7 +131,8 @@ class Task(object):
                             rest = min(last - clock.clock(), MAX_BUNDLE_RUNNING_SECONDS)
                             obj = self.executor.execute(runnings.pop(), rest)
                         else:
-                            obj = self.executor.execute(runnings.pop())
+                            running = Url(runnings.pop())
+                            obj = self.executor.execute(running)
                             
                         if obj is not None:
                             runnings.insert(0, obj)           

@@ -39,8 +39,9 @@ DEFAULT_ERROR_SLEEP_SEC = 20
 DEFAULT_ERROR_RETRY_TIMES = 15
 DEFAULT_ERROR_IGNORE = False
 DEFAULT_SPEEED_REQUIRE_SIZE = 5
+DEFAULT_URL_APPLY_SIZE = 5
 
-class BundleInterrupt(Exception): pass
+class UnitRetryFailed(Exception): pass
 
 class Executor(object):
     def __init__(self, job_desc, id_, mq, 
@@ -204,8 +205,131 @@ class Executor(object):
         self.normal_pages += 1
 
 class UrlExecutor(Executor):
+    def __init__(self, *args, **kwargs):
+        super(UrlExecutor, self).__init__(*args, **kwargs)
+        self.budges = 0
+    
+    def _parse(self, parser_cls, options, url):
+        if hasattr(self, 'content'):
+            del self.opener.content
+            
+        res = parser_cls(self.opener, url, 
+                         logger=self.logger, counter=self.counter_client, 
+                         **options).parse()
+        return list(res)
+    
+    def _log_error(self, url, e):
+        if self.logger:
+            self.logger.error('Error when handle url: %s' % (str(url)))
+            self.logger.exception(e)
+
+        url.error_times = getattr(url, 'error_times', 0) + 1
+            
+        self.counter_client.local_inc(self.ip, self.id_, 
+                                      'error_urls', 1)
+        self.counter_client.global_inc('error_urls', 1)
+        
+    def _handle_error(self, url, e, pack=True):
+        self._log_error(url, e)
+        retries, span, ignore = self._get_handle_error_params(e)
+        if url.error_times <= retries:
+            self.stopped.wait(span)
+            return
+        
+        if pack:
+            content = getattr(self.opener, 'content', None)
+            if content is None and isinstance(e, ServerError):
+                content = e.read()
+            msg = 'Error when handle url: %s' % str(url)
+            self._pack_error(url, msg, e, content)
+            
+        if not ignore:
+            self._error()
+            raise UnitRetryFailed
+
+    def _clear_error(self, url):
+        if hasattr(url, 'error_times'):
+            del url.error_times
+            
+    def _parse_with_process_exception(self, parser_cls, options, url):
+        try:
+            clock = Clock()
+            
+            res = self._parse(parser_cls, options, url)
+            
+            t = clock.clock()
+            kw = {'pages': 1, 'secs': t}
+            self.counter_client.multi_local_inc(self.ip, self.id_, **kw)
+            self.counter_client.multi_global_inc(**kw)
+            
+            self._clear_error(url)
+            self._recover_normal()
+            
+            return res
+        except LoginFailure, e:
+            self._handle_error(url, e)
+            self.clear_and_relogin()
+        except FetchBannedError, e:
+            self._handle_error(url, e)
+            self._got_banned()
+            self._handle_fetch_banned()
+        except ServerError, e:
+            self._handle_error(url, e)
+        except NetworkError, e:
+            self._handle_error(url, e, pack=False)
+        except Exception, e:
+            self._handle_error(url, e)
+            
+        return [url, ]
+    
     def execute(self, url):
-        pass
+        failed = False
+        
+        while not self.nonsuspend.wait(5):
+            continue
+        if self.stopped.is_set():
+            return
+        
+        if self.info_logger:
+            self.info_logger.info('get url: %s' % str(url))
+        
+        rates = 0
+        span = 0.0
+        parser_cls, options = self.job.url_patterns.get_parser(url, options=True)
+        if parser_cls is not None:
+            if self.budges == 0:
+                self.budges = self.budge_client.apply(DEFAULT_URL_APPLY_SIZE)
+            if self.budges == 0 and self.stopped.wait(5):
+                return
+            self.budges -= 1
+            
+            if rates == 0:
+                rates, span = self.speed_client.require(
+                    DEFAULT_SPEEED_REQUIRE_SIZE)
+            if rates == 0:
+                if self.stopped.wait(5):
+                    return
+            rates -= 1
+            
+            try:
+                next_urls = self._parse_with_process_exception(
+                    parser_cls, options, url)
+                next_urls = list(self.job_desc.url_patterns.matches(next_urls))
+                
+                if next_urls:
+                    self.mq.put(next_urls)
+                if hasattr(self.opener, 'close'):
+                    self.opener.close()
+                    
+                self.stopped.wait(span)
+            except UnitRetryFailed:
+                failed = True
+        
+        if self.settings.job.inc == True:
+            self.mq.put_inc(url)
+        if not failed:
+            self._finish()
+            return url
 
 class BundleExecutor(Executor):
     def __init__(self, *args, **kwargs):
@@ -217,7 +341,8 @@ class BundleExecutor(Executor):
             del self.opener.content
             
         res = parser_cls(self.opener, url, bundle=bundle,
-                         logger=self.logger, **options).parse()
+                         logger=self.logger, counter=self.counter_client, 
+                         **options).parse()
         if isinstance(res, tuple):
             return res
         elif isinstance(res, types.GeneratorType):
@@ -233,6 +358,8 @@ class BundleExecutor(Executor):
         
     def _log_error(self, bundle, url, e):
         if self.logger:
+            self.logger.error('Error when handle bundle: %s, url: %s' % (
+                str(bundle), str(url)))
             self.logger.exception(e)
         if url == getattr(bundle, 'error_url', None):
             bundle.error_times = getattr(bundle, 'error_times', 0) + 1
@@ -271,7 +398,7 @@ class BundleExecutor(Executor):
             else:
                 bundle.current_urls.insert(0, url)
                 self._error()
-                raise BundleInterrupt
+                raise UnitRetryFailed
         finally:
             self.clock.resume()
 
@@ -349,6 +476,7 @@ class BundleExecutor(Executor):
                 if rates == 0:
                     if self.stopped.wait(5):
                         break
+                rates -= 1
                 
                 try:
                     next_urls, bundles = self._parse_with_process_exception(
@@ -371,7 +499,7 @@ class BundleExecutor(Executor):
                         
                     if self.stopped.wait(span):
                         break
-                except BundleInterrupt:
+                except UnitRetryFailed:
                     failed = True
                     break
         

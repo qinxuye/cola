@@ -273,6 +273,10 @@ class MpSpeedControlServer(SpeedControlServer, MpFunctionServer):
                                     rpc_server=rpc_server, app_name=app_name, 
                                     counter_server=counter_server, addrs=addrs)
         MpFunctionServer.__init__(self, instances, stopped)
+        
+    def shutdown(self):
+        SpeedControlServer.shutdown(self)
+        MpFunctionServer.join(self)
     
 class SpeedControlClient(object):
     def __init__(self, server, addr, instance_id, app_name=None):

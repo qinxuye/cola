@@ -102,12 +102,12 @@ class MpCounterServer(CounterServer, MpFunctionServer):
                                dict_cls=dict_cls)
         MpFunctionServer.__init__(self, instances, stopped)
         
+    def shutdown(self):
+        CounterServer.shutdown(self)
+        MpFunctionServer.join(self)
+        
 class CounterClient(object):
     def __init__(self, server, app_name=None):
-        if isinstance(server, CounterServer):
-            self.remote = False
-        else:
-            self.remote = True
         self.server = server
         self.app_name = app_name
         self.prefix = get_rpc_prefix(self.app_name, FUNC_PREFIX)

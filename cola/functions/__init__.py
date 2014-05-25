@@ -31,7 +31,7 @@ class MpFunctionServer(object):
         for _ in range(instances):
             agent, client = multiprocessing.Pipe()
             self.clients.append(client)
-            t = threading.Thread(target=self._init_agent, agent)
+            t = threading.Thread(target=self._init_agent, args=(agent, ))
             t.setDaemon(True)
             self.threads.append(t)
             t.start()

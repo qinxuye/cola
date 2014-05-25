@@ -156,6 +156,10 @@ class MpBudgetApplyServer(BudgetApplyServer, MpFunctionServer):
             rpc_server=rpc_server, app_name=app_name)
         MpFunctionServer.__init__(self, instances, stopped)
         
+    def shutdown(self):
+        MpBudgetApplyServer.shutdown(self)
+        MpFunctionServer.join(self)
+        
 class BudgetApplyClient(object):
     def __init__(self, server, app_name=None):
         self.server = server

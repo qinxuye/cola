@@ -39,7 +39,7 @@ class Task(object):
     def __init__(self, working_dir, job_desc, task_id, 
                  mq, stopped, nonsuspend, 
                  counter_client, budget_client, speed_client,
-                 is_local=False, logger=None, info_logger=None,
+                 is_local=False, logger=None, 
                  env=None, job_name=None):
         self.dir_ = working_dir
         self.job_desc = job_desc
@@ -55,7 +55,6 @@ class Task(object):
         
         self.is_local = is_local
         self.logger = logger
-        self.info_logger = info_logger
         
         self.inc = self.settings.job.inc
         self.n_priorities = self.settings.job.priorities
@@ -69,11 +68,11 @@ class Task(object):
         self.is_bundle = self.settings.job.mode == 'bundle'
         
         executor_cls = BundleExecutor if self.is_bundle else UrlExecutor
-        self.executor = executor_cls(self.job_desc,
+        self.executor = executor_cls(self.task_id, self.job_desc,
             self.mq, self.dir_, self.stopped, self.nonsuspend, 
             self.budget_client, self.speed_client, 
-            self.counter_client, env=env, logger=self.logger,
-            info_logger=self.info_logger)
+            self.counter_client, is_local=self.is_local, 
+            env=env, logger=self.logger)
         
         self.prepare()
         self.load()
@@ -93,6 +92,9 @@ class Task(object):
         self.save()
         
     def prepare(self):
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+        
         self.executor.login()
         if self.task_id < len(self.job_desc.starts):
             start = self.job_desc.starts[self.task_id]
@@ -131,8 +133,7 @@ class Task(object):
                             rest = min(last - clock.clock(), MAX_BUNDLE_RUNNING_SECONDS)
                             obj = self.executor.execute(runnings.pop(), rest)
                         else:
-                            running = Url(runnings.pop())
-                            obj = self.executor.execute(running)
+                            obj = self.executor.execute(runnings.pop())
                             
                         if obj is not None:
                             runnings.insert(0, obj)           

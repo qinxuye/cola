@@ -62,12 +62,12 @@ class Log(object):
         return self.logger
 
 def get_logger(name='cola', filename=None, server=None, is_master=False, 
-               basic_level=logging.INFO):
+               basic_level=logging.DEBUG):
     log = Log(name, basic_level)
     log.add_stream_log(basic_level)
     
     if filename is not None:
-        level = basic_level
+        level = logging.INFO
         if is_master:
             level = logging.ERROR
         log.add_file_log(filename, level)

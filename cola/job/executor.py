@@ -43,13 +43,23 @@ DEFAULT_URL_APPLY_SIZE = 5
 
 class UnitRetryFailed(Exception): pass
 
+class ExecutorCounter(object):
+    def __init__(self, executor):
+        self.executor = executor
+        self.counter = executor.counter_client
+        
+    def inc(self, item, value=1):
+        self.counter.local_inc(self.executor.ip, self.executor.id_, 
+                               item, val=value)
+        self.counter.global_inc(item, val=value)
+
 class Executor(object):
-    def __init__(self, job_desc, id_, mq, 
+    def __init__(self, id_, job_desc, mq, 
                  working_dir, stopped, nonsuspend, 
                  budget_client, speed_client, counter_client, 
-                 env=None, logger=None, info_logger=None):
-        self.job_desc = job_desc
+                 is_local=False, env=None, logger=None):
         self.id_ = id_
+        self.job_desc = job_desc
         self.opener = job_desc.opener_cls()
         self.mq = mq
         self.dir_ = working_dir
@@ -65,10 +75,10 @@ class Executor(object):
         if env is None:
             env = {}
         self.env = env
+        self.is_local = is_local
         self.ip = env.get('ip') or get_ip()
             
         self.logger = logger
-        self.info_logger = info_logger
         
         # used for tracking if banned
         self.is_normal = True
@@ -171,7 +181,9 @@ class Executor(object):
         self.clear_and_relogin()
         # http proxies
         
-    def _finish(self):
+    def _finish(self, unit):
+        if self.logger:
+            self.logger.info('Finish %s' % str(unit))
         self.budge_client.finish()
         self.counter_client.local_inc(self.ip, self.id_,
                                       'finishes', 1)
@@ -214,7 +226,8 @@ class UrlExecutor(Executor):
             del self.opener.content
             
         res = parser_cls(self.opener, url, 
-                         logger=self.logger, counter=self.counter_client, 
+                         logger=self.logger, 
+                         counter=ExecutorCounter(self), 
                          **options).parse()
         return list(res)
     
@@ -255,7 +268,7 @@ class UrlExecutor(Executor):
         try:
             clock = Clock()
             
-            res = self._parse(parser_cls, options, url)
+            res = self._parse(parser_cls, options, str(url))
             
             t = clock.clock()
             kw = {'pages': 1, 'secs': t}
@@ -290,12 +303,12 @@ class UrlExecutor(Executor):
         if self.stopped.is_set():
             return
         
-        if self.info_logger:
-            self.info_logger.info('get url: %s' % str(url))
+        if self.logger:
+            self.logger.info('get url: %s' % str(url))
         
         rates = 0
         span = 0.0
-        parser_cls, options = self.job.url_patterns.get_parser(url, options=True)
+        parser_cls, options = self.job_desc.url_patterns.get_parser(url, options=True)
         if parser_cls is not None:
             if self.budges == 0:
                 self.budges = self.budge_client.apply(DEFAULT_URL_APPLY_SIZE)
@@ -328,7 +341,8 @@ class UrlExecutor(Executor):
         if self.settings.job.inc == True:
             self.mq.put_inc(url)
         if not failed:
-            self._finish()
+            self._finish(url)
+        if failed:
             return url
 
 class BundleExecutor(Executor):
@@ -458,13 +472,14 @@ class BundleExecutor(Executor):
                 break
             
             url = bundle.current_urls.pop(0)
-            if self.info_logger:
-                self.info_logger.info('get %s url: %s' % 
-                                      (bundle.label, url))
+            if self.logger:
+                self.logger.debug('get %s url: %s' % 
+                                    (bundle.label, url))
             
             rates = 0
             span = 0.0
-            parser_cls, options = self.job.url_patterns.get_parser(url, options=True)
+            parser_cls, options = self.job_desc.url_patterns.get_parser(url, 
+                                                                        options=True)
             if parser_cls is not None:
                 if self.budge_client.apply(1) == 0:
                     if self.stopped.wait(5):
@@ -505,7 +520,7 @@ class BundleExecutor(Executor):
         
         if len(bundle.current_urls) == 0 or failed:
             if not failed:
-                self._finish()
+                self._finish(bundle)
             if self.settings.job.inc == True:
                 self.mq.put_inc(bundle)
         else:

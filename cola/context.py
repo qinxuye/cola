@@ -22,39 +22,30 @@ Created on 2014-2-7
 
 import os
 import tempfile
+import multiprocessing
+import signal
+import threading
 
-from cola.core.config import PropertyObject, Config
-from cola.core.utils import get_ip
+from cola.core.config import Config
+from cola.core.utils import get_ip, import_job_desc
+from cola.job import Job
 
 conf_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'conf')
 main_conf = Config(os.path.join(conf_dir, 'main.yaml'))
-
-class Settings(object): 
-    def __init__(self, user_conf=None, **user_defines):
-        self.main_conf = main_conf
-        if user_conf is not None:
-            if isinstance(user_conf, str):
-                self.user_conf = Config(user_conf)
-            else:
-                self.user_conf = user_conf
-        else:
-            self.user_conf = PropertyObject(dict())
-        self.user_defines = PropertyObject(user_defines)
-         
-        dicts = PropertyObject({})
-        for obj in (self.main_conf, self.user_conf, self.user_defines):
-            dicts.update(obj)
-        for k in dicts:
-            if not k.startswith('_'):
-                setattr(self, k, getattr(dicts, k))
-        self.values = dicts
                 
 class Context(object):
-    def __init__(self, is_master, master, local_mode=False, is_client=False, 
-                 working_dir=None, mkdirs=False, addr=None, addrs=None):
+    def __init__(self, local_mode=False, is_master=False, master=None, 
+                 is_client=False, working_dir=None, mkdirs=False, 
+                 addr=None, addrs=None):
+        self.is_local_mode = local_mode
         self.is_master = is_master
         self.is_client = is_client
-        self.is_local_mode = local_mode
+        
+        self.master = master
+        if not self.is_local_mode:
+            assert self.master is not None
+            if ':' not in self.master:
+                self.master = '%s:%s' % (self.master, main_conf.master.port)
         
         self.working_dir = working_dir
         if self.working_dir is None:
@@ -74,9 +65,48 @@ class Context(object):
             else:
                 port = main_conf.worker.port
             self.addr = '%s:%s' % (self.addr, port)
+        self.ip = self.addr.split(':', 1)[0]
+            
+        fix_addr = lambda addr: addr if ':' in addr \
+                    else '%s:%s'%(addr, main_conf.worker.port)
+        fix_ip = lambda addr: addr if ':' not in addr \
+                    else addr.split(':', 1)[0]
         self.addrs = addrs
         if self.addrs is None:
-            self.addrs = []
+            self.addrs = [self.addr, ]
+        self.ips = [fix_ip(address) for address in self.addrs]
+        self.addrs = [fix_addr(address) for address in self.addrs]
             
-        self.env = {'ip': self.addr.split(':')[0], 
-                    'root': self.working_dir}
+        self.manager = multiprocessing.Manager()
+        self.env = self.manager.dict({'ip': self.ip, 
+                                      'root': self.working_dir})
+        
+    def _run_local_job(self, job_path, overwrite=False):
+        job_desc = import_job_desc(job_path)
+        base_name = job_desc.uniq_name
+        job_name = base_name
+        working_dir = os.path.join(self.working_dir, 'worker', job_name)
+            
+        if overwrite:
+            idx = 1
+            while os.path.exists(working_dir):
+                job_name = '%s%s' % (base_name, idx)
+                working_dir = os.path.join(self.working_dir, job_name)
+                idx += 1
+            
+        job = Job(self, job_path, job_name=job_name, job_desc=job_desc,
+                      working_dir=working_dir)
+        t = threading.Thread(target=job.run)
+        t.setDaemon(True)
+        t.start()
+        
+        def stop(signum, frame):
+            job.shutdown()
+        signal.signal(signal.SIGINT, stop)
+        signal.signal(signal.SIGTERM, stop)
+        
+        t.join()
+        
+    def run_job(self, job_path, overwrite=False):
+        if self.is_local_mode:
+            self._run_local_job(job_path, overwrite=overwrite)

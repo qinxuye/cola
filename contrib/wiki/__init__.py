@@ -30,7 +30,7 @@ from cola.core.parsers import Parser
 from cola.core.opener import MechanizeOpener
 from cola.core.errors import DependencyNotInstalledError
 from cola.core.config import Config
-from cola.job import Job
+from cola.job import JobDescription
 
 try:
     from bs4 import BeautifulSoup
@@ -151,10 +151,11 @@ url_patterns = UrlPatterns(
     Url(r'^http://(zh|en).wikipedia.org/wiki/[^(:|/)]+$', 'wiki_page', WikiParser)
 )
 
-def get_job():
-    return Job('wikipedia crawler', url_patterns, MechanizeOpener, starts,
-               instances=user_config.job.instances, user_conf=user_config)
+def get_job_desc():
+    return JobDescription('wikipedia crawler', url_patterns, MechanizeOpener,
+                          user_config, starts)
     
 if __name__ == "__main__":
-    from cola.worker.loader import load_job
-    load_job(os.path.dirname(os.path.abspath(__file__)))
+    from cola.context import Context
+    ctx = Context(local_mode=True)
+    ctx.run_job(os.path.dirname(os.path.abspath(__file__)))

@@ -99,7 +99,7 @@ class MicroBlogParser(WeiboParser):
         url = url or self.url
         params = urldecode(url)
         br = self.opener.browse_open(url)
-        self.logger.debug('load %s finish' % url)
+#         self.logger.debug('load %s finish' % url)
         
         if not self.check(url, br):
             return [], []
@@ -231,7 +231,7 @@ class MicroBlogParser(WeiboParser):
             params['max_id'] = max_id
         else:
             del params['max_id']
-        self.logger.debug('parse %s finish' % url)
+#         self.logger.debug('parse %s finish' % url)
                 
         # if not has next page
         if len(divs) == 0 or finished:
@@ -288,7 +288,7 @@ class ForwardCommentLikeParser(WeiboParser):
         jsn = None
         try:
             br = self.opener.browse_open(url)
-            self.logger.debug('load %s finish' % url)
+#             self.logger.debug('load %s finish' % url)
             jsn = json.loads(br.response().read())
         except (ValueError, URLError) as e:
             return self._error(url, e)
@@ -347,7 +347,7 @@ class ForwardCommentLikeParser(WeiboParser):
         
         try:
             mblog.save()
-            self.logger.debug('parse %s finish' % url)
+#             self.logger.debug('parse %s finish' % url)
         except ValidationError, e:
             return self._error(url, e)
         
@@ -368,7 +368,7 @@ class UserInfoParser(WeiboParser):
         
         url = url or self.url
         br = self.opener.browse_open(url)
-        self.logger.debug('load %s finish' % url)
+#         self.logger.debug('load %s finish' % url)
         soup = beautiful_soup(br.response().read())
         
         if not self.check(url, br):
@@ -493,7 +493,7 @@ class UserInfoParser(WeiboParser):
                     weibo_user.info.tags.append(a.text)
                 
         weibo_user.save()
-        self.logger.debug('parse %s finish' % url)
+#         self.logger.debug('parse %s finish' % url)
         return [], []
     
 class UserFriendParser(WeiboParser):
@@ -506,7 +506,7 @@ class UserFriendParser(WeiboParser):
         br, soup = None, None
         try:
             br = self.opener.browse_open(url)
-            self.logger.debug('load %s finish' % url)
+#             self.logger.debug('load %s finish' % url)
             soup = beautiful_soup(br.response().read())
         except Exception, e:
             return self._error(url, e)
@@ -582,7 +582,7 @@ class UserFriendParser(WeiboParser):
                 weibo_user.fans.append(friend)
                 
         weibo_user.save()
-        self.logger.debug('parse %s finish' % url)
+#         self.logger.debug('parse %s finish' % url)
         
         urls = []
         pages = html.find('div', attrs={'class': 'W_pages', 'node-type': 'pageList'})

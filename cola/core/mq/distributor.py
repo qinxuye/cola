@@ -30,7 +30,7 @@ class Distributor(object):
     def __init__(self, addrs, copies=1):
         self.nodes = list(addrs)
         self.hash_ring = HashRing(self.nodes)
-        self.copies = copies
+        self.copies = min(copies, len(self.nodes)-1)
         
     def distribute(self, objs):
         node_objs = defaultdict(list)

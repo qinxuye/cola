@@ -124,7 +124,7 @@ class Job(object):
                                    self.ctx.addrs, **kw)
         else:
             kw['instances'] = self.n_containers
-            self.mq = MpMessageQueue(mq_dir, self.rpc_server, self.c.addr,
+            self.mq = MpMessageQueue(mq_dir, self.rpc_server, self.ctx.addr,
                                      self.ctx.addrs, **kw)
         # register shutdown callback
         self.shutdown_callbacks.append(self.mq.shutdown)

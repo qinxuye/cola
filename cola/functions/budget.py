@@ -151,7 +151,7 @@ class BudgetApplyServer(object):
 class MpBudgetApplyServer(BudgetApplyServer, MpFunctionServer):
     def __init__(self, working_dir, settings, instances,
                  stopped, rpc_server=None, app_name=None):
-        MpBudgetApplyServer.__init__(self,
+        BudgetApplyServer.__init__(self,
             working_dir, settings,
             rpc_server=rpc_server, app_name=app_name)
         MpFunctionServer.__init__(self, instances, stopped)

@@ -71,6 +71,7 @@ class Container(object):
                                                        self.task_start_id+i,
                                                        app_name=self.job_name)
         self.init_tasks()
+        self._init_counter_sync()
     
     def init_tasks(self):
         self.tasks = []
@@ -111,5 +112,6 @@ class Container(object):
             
 class MultiProcessContainer(Process, Container):
     def __init__(self, *args, **kwargs):
-        Process.__init__(self, *args, **kwargs)
+        Container.__init__(self, *args, **kwargs)
+        Process.__init__(self)
         Container.__init__(*args, **kwargs)

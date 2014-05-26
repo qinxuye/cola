@@ -96,7 +96,7 @@ class Context(object):
             
         job = Job(self, job_path, job_name=job_name, job_desc=job_desc,
                       working_dir=working_dir)
-        t = threading.Thread(target=job.run)
+        t = threading.Thread(target=job.run, args=(True, ))
         t.setDaemon(True)
         t.start()
         

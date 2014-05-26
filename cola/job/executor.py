@@ -39,7 +39,6 @@ DEFAULT_ERROR_SLEEP_SEC = 20
 DEFAULT_ERROR_RETRY_TIMES = 15
 DEFAULT_ERROR_IGNORE = False
 DEFAULT_SPEEED_REQUIRE_SIZE = 5
-DEFAULT_URL_APPLY_SIZE = 5
 
 class UnitRetryFailed(Exception): pass
 
@@ -68,7 +67,7 @@ class Executor(object):
         self.stopped = stopped
         self.nonsuspend = nonsuspend
         
-        self.budge_client = budget_client
+        self.budget_client = budget_client
         self.speed_client = speed_client
         self.counter_client = counter_client
         
@@ -111,7 +110,7 @@ class Executor(object):
             if shuffle:
                 random.shuffle(kws)
             else:
-                idx = self.task_id % len(kws)
+                idx = self.id_ % len(kws)
                 kws = kws[idx:] + kws[:idx]
             
             for kw in kws:
@@ -184,13 +183,13 @@ class Executor(object):
     def _finish(self, unit):
         if self.logger:
             self.logger.info('Finish %s' % str(unit))
-        self.budge_client.finish()
+        self.budget_client.finish()
         self.counter_client.local_inc(self.ip, self.id_,
                                       'finishes', 1)
         self.counter_client.global_inc('finishes', 1)
         
     def _error(self):
-        self.budge_client.error()
+        self.budget_client.error()
         self.counter_client.local_inc(self.ip, self.id_, 
                                       'errors', 1)
         self.counter_client.global_inc('errors', 1)
@@ -310,12 +309,6 @@ class UrlExecutor(Executor):
         span = 0.0
         parser_cls, options = self.job_desc.url_patterns.get_parser(url, options=True)
         if parser_cls is not None:
-            if self.budges == 0:
-                self.budges = self.budge_client.apply(DEFAULT_URL_APPLY_SIZE)
-            if self.budges == 0 and self.stopped.wait(5):
-                return
-            self.budges -= 1
-            
             if rates == 0:
                 rates, span = self.speed_client.require(
                     DEFAULT_SPEEED_REQUIRE_SIZE)
@@ -481,10 +474,6 @@ class BundleExecutor(Executor):
             parser_cls, options = self.job_desc.url_patterns.get_parser(url, 
                                                                         options=True)
             if parser_cls is not None:
-                if self.budge_client.apply(1) == 0:
-                    if self.stopped.wait(5):
-                        break
-                
                 if rates == 0:
                     rates, span = self.speed_client.require(
                         DEFAULT_SPEEED_REQUIRE_SIZE)

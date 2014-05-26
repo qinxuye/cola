@@ -28,10 +28,10 @@ except ImportError:
 
 from cola.job.executor import UrlExecutor, BundleExecutor
 from cola.core.utils import Clock
-from cola.core.unit import Url
 
 MAX_RUNNING_SECONDS = 10 * 60 # max seconds for a unit in some mq to run
 MAX_BUNDLE_RUNNING_SECONDS = 2 * 60  # max seconds for a bundle to run
+DEFAULT_URL_APPLY_SIZE = 5
 
 TASK_STATUS_FILENAME = 'task.status'
 
@@ -66,6 +66,7 @@ class Task(object):
         self.priorities_objs = [[]] * self.full_priorities
         
         self.is_bundle = self.settings.job.mode == 'bundle'
+        self.budgets = 0
         
         executor_cls = BundleExecutor if self.is_bundle else UrlExecutor
         self.executor = executor_cls(self.task_id, self.job_desc,
@@ -106,7 +107,10 @@ class Task(object):
             runnings.append(self.priorities_objs[priority].pop(0))
         else:
             is_inc = priority == self.n_priorities
-            running = self.mq.get(priority=priority, inc=is_inc)
+            if not is_inc:
+                running = self.mq.get(priority=priority)
+            else:
+                running = self.mq.get_inc(priority=priority)
             if running:
                 runnings.append(running)
         
@@ -126,6 +130,22 @@ class Task(object):
                     while not self.stopped.is_set():
                         if clock.clock() >= last:
                             break
+                        
+                        if self.is_bundle:
+                            if self.budget_client.apply(1) == 0:
+                                if self.stopped.wait(5):
+                                    break
+                                continue
+                        else:
+                            if self.budges == 0:
+                                self.budges = self.budge_client.apply(DEFAULT_URL_APPLY_SIZE)
+                            if self.budges == 0:
+                                if self.stopped.wait(5):
+                                    return
+                                continue
+                            else:
+                                self.budges -= 1
+                        
                         self._get_unit(curr_priority, runnings)
                         if len(runnings) == 0:
                             break

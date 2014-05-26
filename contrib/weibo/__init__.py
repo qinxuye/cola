@@ -24,7 +24,7 @@ import os
 
 from cola.core.opener import MechanizeOpener
 from cola.core.urls import Url, UrlPatterns
-from cola.job import Job
+from cola.job import JobDescription
 
 from login import WeiboLogin
 from parsers import MicroBlogParser, ForwardCommentLikeParser,\
@@ -47,12 +47,11 @@ url_patterns = UrlPatterns(
     Url(r'http://weibo.com/\d+/fans.*', 'fans', UserFriendParser)
 )
 
-def get_job():
-    return Job('sina weibo crawler', url_patterns, MechanizeOpener, starts,
-               is_bundle=True, unit_cls=WeiboUserBundle, 
-               instances=instances, debug=False, user_conf=user_config,
-               login_hook=login_hook)
+def get_job_desc():
+    return JobDescription('sina weibo crawler', url_patterns, MechanizeOpener, user_config, 
+                          starts, unit_cls=WeiboUserBundle, login_hook=login_hook)
     
 if __name__ == "__main__":
-    from cola.worker.loader import load_job
-    load_job(os.path.dirname(os.path.abspath(__file__)))
+    from cola.context import Context
+    ctx = Context(local_mode=True)
+    ctx.run_job(os.path.dirname(os.path.abspath(__file__)))

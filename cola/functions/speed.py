@@ -294,5 +294,5 @@ class SpeedControlClient(object):
             return self.server.require(self.addr, self.instance_id, 
                                        size=size)
         else:
-            self.server.send('require', (self.addr, self.instance_id, size))
+            self.server.send(('require', (self.addr, self.instance_id, size)))
             return self.server.recv()

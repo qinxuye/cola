@@ -137,14 +137,14 @@ class Task(object):
                                     break
                                 continue
                         else:
-                            if self.budges == 0:
-                                self.budges = self.budge_client.apply(DEFAULT_URL_APPLY_SIZE)
-                            if self.budges == 0:
+                            if self.budgets == 0:
+                                self.budgets = self.budget_client.apply(DEFAULT_URL_APPLY_SIZE)
+                            if self.budgets == 0:
                                 if self.stopped.wait(5):
                                     return
                                 continue
                             else:
-                                self.budges -= 1
+                                self.budgets -= 1
                         
                         self._get_unit(curr_priority, runnings)
                         if len(runnings) == 0:

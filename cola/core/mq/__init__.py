@@ -123,6 +123,9 @@ class MpMessageQueueClient(object):
             self.client.recv()
             return
         
+    def put_inc(self, objs, flush=False):
+        return self.put(objs, flush=flush, inc=True)
+        
     def get(self, size=1, priority=0, inc=False):
         if self.stopped.is_set():
             return
@@ -138,6 +141,9 @@ class MpMessageQueueClient(object):
                 continue
             
             return self.client.recv()
+        
+    def get_inc(self, size=1, priority=0):
+        return self.get(size=size, priority=priority, inc=True)
             
     def exist(self, obj):
         if self.stopped.is_set():

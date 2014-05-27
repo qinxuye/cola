@@ -171,7 +171,7 @@ class BudgetApplyClient(object):
         elif isinstance(self.server, basestring):
             return client_call(self.server, self.prefix+func, *args)
         else:
-            self.server.send(func, args)
+            self.server.send((func, args))
             return self.server.recv()
         
     def apply(self, budget):

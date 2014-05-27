@@ -174,9 +174,9 @@ class CounterClient(object):
                 self.server.inc_merge(self.inc_counter.container)
                 self.server.acc_merge(self.acc_counter.container)
             else:
-                self.server.send('inc_merge', (self.inc_counter.container, ))
+                self.server.send(('inc_merge', (self.inc_counter.container, )))
                 self.server.receive()
-                self.server.send('acc_merge', (self.acc_counter.container, ))
+                self.server.send(('acc_merge', (self.acc_counter.container, )))
                 self.server.receive()
             self.inc_counter.reset()
             self.acc_counter.reset()

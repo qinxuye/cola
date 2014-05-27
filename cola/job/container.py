@@ -80,9 +80,9 @@ class Container(object):
             task_dir = os.path.join(self.working_dir, str(task_id))
             task = Task(task_dir, self.job_desc, task_id, self.mq, 
                         self.stopped, self.nonsuspend,
-                        self.counter_clients[task_id], 
-                        self.budget_clients[task_id], 
-                        self.speed_clients[task_id],
+                        self.counter_clients[i], 
+                        self.budget_clients[i], 
+                        self.speed_clients[i],
                         logger=self.logger, env=self.env, 
                         is_local=self.is_local, job_name=self.job_name)
             t = threading.Thread(target=task.run)
@@ -114,4 +114,3 @@ class MultiProcessContainer(Process, Container):
     def __init__(self, *args, **kwargs):
         Container.__init__(self, *args, **kwargs)
         Process.__init__(self)
-        Container.__init__(*args, **kwargs)

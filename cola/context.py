@@ -42,10 +42,13 @@ class Context(object):
         self.is_client = is_client
         
         self.master = master
+        self.master_ip = self.master
         if not self.is_local_mode:
             assert self.master is not None
             if ':' not in self.master:
                 self.master = '%s:%s' % (self.master, main_conf.master.port)
+            else:
+                self.master_ip = self.master.split(':', 1)[0]
         
         self.working_dir = working_dir
         if self.working_dir is None:

@@ -39,7 +39,7 @@ from cola.functions.speed import SpeedControlServer, \
                                     MpSpeedControlServer
 from cola.functions.counter import CounterServer, \
                                     MpCounterServer
-from cola.job.container import Container, MultiProcessContainer
+from cola.job.container import Container
 
 JOB_NAME_RE = re.compile(r'(\w| )+')
 UNLIMIT_BLOOM_FILTER_CAPACITY = 1000000
@@ -184,8 +184,6 @@ class Job(object):
                 [self.ctx.master for _ in range(self.n_instances)] 
             
     def init_containers(self):
-        container_cls = Container if not self.is_multi_process \
-                            else MultiProcessContainer
         acc = 0
         for container_id in range(self.n_containers):
             if self.is_multi_process:
@@ -196,17 +194,17 @@ class Job(object):
             n_tasks = self.n_instances / self.n_containers
             if container_id < self.n_instances % self.n_containers:
                 n_tasks += 1
-            container = container_cls(container_id, self.working_dir, 
-                                      mq_client, self.job_def_path, 
-                                      self.ctx.env, self.job_name, 
-                                      self.stopped, self.nonsuspend, 
-                                      n_tasks=n_tasks,
-                                      is_local=self.ctx.is_local_mode,
-                                      master=self.ctx.master,
-                                      task_start_id=acc)
-            container.init(self.counter_args[acc: acc+n_tasks], 
-                           self.budget_args[acc: acc+n_tasks],
-                           self.speed_args[acc: acc+n_tasks])
+            container = Container(container_id, self.working_dir, 
+                                  mq_client, self.job_def_path, 
+                                  self.ctx.env, self.job_name, 
+                                  self.counter_args[acc: acc+n_tasks], 
+                                  self.budget_args[acc: acc+n_tasks],
+                                  self.speed_args[acc: acc+n_tasks],
+                                  self.stopped, self.nonsuspend, 
+                                  n_tasks=n_tasks,
+                                  is_local=self.ctx.is_local_mode,
+                                  master_ip=self.ctx.master_ip,
+                                  task_start_id=acc)
             self.containers.append(container)
             acc += n_tasks
         
@@ -230,13 +228,19 @@ class Job(object):
     def run(self, block=False):
         self.init()
         if self.is_multi_process:
+            processes = []
             for container in self.containers:
-                container.start()
+                process = multiprocessing.Process(target=container.run, 
+                                                  args=(block, ))
+                process.start()
+                processes.append(process)
+            for process in processes:
+                process.join()
         else:
             for container in self.containers:
                 container.run()
-        if block:
-            self.wait_for_stop()
+            if block:
+                self.wait_for_stop()
             
     def wait_for_stop(self):
         [container.wait_for_stop() for container in self.containers]

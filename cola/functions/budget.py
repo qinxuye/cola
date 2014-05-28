@@ -60,6 +60,9 @@ class BudgetApplyServer(object):
         
         self.lock = threading.Lock()
         
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+        
         self.load()
         self.set_status()
         self._register_rpc()
@@ -157,7 +160,7 @@ class MpBudgetApplyServer(BudgetApplyServer, MpFunctionServer):
         MpFunctionServer.__init__(self, instances, stopped)
         
     def shutdown(self):
-        MpBudgetApplyServer.shutdown(self)
+        BudgetApplyServer.shutdown(self)
         MpFunctionServer.join(self)
         
 class BudgetApplyClient(object):

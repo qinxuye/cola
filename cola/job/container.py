@@ -104,14 +104,17 @@ class Container(object):
             self.task_threads.append(t)
             
     def _init_counter_sync(self):
+        def _sync():
+            for task in self.tasks:
+                task.counter_client.sync()
+        
         def sync():
             try:
                 while not self.stopped.is_set():
-                    for task in self.tasks:
-                        task.counter_client.sync()
+                    _sync()
                     self.stopped.wait(5)
             finally:
-                sync()
+                _sync()
         self.sync_t = threading.Thread(target=sync)
             
     def run(self, block=False):
@@ -125,7 +128,7 @@ class Container(object):
             self.wait_for_stop()
             
     def wait_for_stop(self):
-        self.init()
+        if not self.inited: return
         
         for task in self.task_threads:
             task.join()

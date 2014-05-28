@@ -88,6 +88,9 @@ class SpeedControlServer(object):
         self.instance_curr_rates = defaultdict(lambda: 0)
         self.instance_spans = {}
         
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+        
         self.load()
         
         self.stopped = threading.Event()

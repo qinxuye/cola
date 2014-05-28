@@ -48,8 +48,11 @@ class CounterServer(object):
         self.inc_counter = Counter(container=dict_cls())
         self.acc_counter = Counter(agg=MergeAggregator(), 
                                    container=dict_cls())
-        self.load()
         
+        if not os.path.exists(self.dir_):
+            os.makedirs(self.dir_)
+        
+        self.load()
         self._register_rpc()
         
     def _register_rpc(self):

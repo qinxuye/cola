@@ -41,13 +41,16 @@ class MpFunctionServer(object):
             t.join()
         
     def _init_agent(self, agent):
-        while not self.stopped.is_set():
-            need_process = agent.poll(10)
-            if not need_process:
-                continue
-            
-            func, args = agent.recv()
-            agent.send(getattr(self, func)(*args))
+        try:
+            while not self.stopped.is_set():
+                need_process = agent.poll(10)
+                if not need_process:
+                    continue
+                
+                func, args = agent.recv()
+                agent.send(getattr(self, func)(*args))
+        finally:
+            agent.close()
             
     def get_pipe(self, instance_id):
         return self.clients[instance_id]

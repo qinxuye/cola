@@ -32,6 +32,7 @@ from cola.core.mq import MessageQueue, MpMessageQueue, \
                             MpMessageQueueClient
 from cola.core.dedup import FileBloomFilterDeduper
 from cola.core.unit import Bundle, Url
+from cola.core.logs import get_logger
 from cola.settings import Settings
 from cola.functions.budget import BudgetApplyServer, \
                                     MpBudgetApplyServer
@@ -84,6 +85,8 @@ class Job(object):
             
         if not os.path.exists(self.working_dir):
             os.makedirs(self.working_dir)
+            
+        self.logger = get_logger(name='cola_job')
         
         self.stopped = multiprocessing.Event()
         self.nonsuspend = multiprocessing.Event()
@@ -110,7 +113,10 @@ class Job(object):
         deduper_path = os.path.join(self.working_dir, 'dedup')
         self.deduper = FileBloomFilterDeduper(deduper_path, capacity)
         # register shutdown callback
-        self.shutdown_callbacks.append(self.deduper.shutdown)
+        def shutdown():
+            self.logger.debug('shutdown deduper')
+            self.deduper.shutdown()
+        self.shutdown_callbacks.append(shutdown)
         
     def init_mq(self):
         mq_dir = os.path.join(self.working_dir, 'mq')
@@ -127,7 +133,10 @@ class Job(object):
             self.mq = MpMessageQueue(mq_dir, self.rpc_server, self.ctx.addr,
                                      self.ctx.addrs, **kw)
         # register shutdown callback
-        self.shutdown_callbacks.append(self.mq.shutdown)
+        def shutdown():
+            self.logger.debug('shutdown mq')
+            self.mq.shutdown()
+        self.shutdown_callbacks.append(shutdown)
         
     def _init_function_servers(self):
         budget_dir = os.path.join(self.working_dir, 'budget')
@@ -138,7 +147,10 @@ class Job(object):
             self.budget_server = MpBudgetApplyServer(budget_dir, self.settings,
                                                      self.n_instances, self.stopped,
                                                      self.rpc_server, self.job_name)
-        self.shutdown_callbacks.append(self.budget_server.shutdown)
+        def budget_shutdown():
+            self.logger.debug('shutdown budget server')
+            self.budget_server.shutdown()
+        self.shutdown_callbacks.append(budget_shutdown)
         
         counter_dir = os.path.join(self.working_dir, 'counter')
         if not self.is_multi_process:
@@ -148,7 +160,10 @@ class Job(object):
             self.counter_server = MpCounterServer(counter_dir, self.settings,
                                                   self.n_containers, self.stopped,
                                                   self.rpc_server, self.job_name)
-        self.shutdown_callbacks.append(self.counter_server.shutdown)
+        def counter_shutdown():
+            self.logger.debug('shutdown counter server')
+            self.counter_server.shutdown()
+        self.shutdown_callbacks.append(counter_shutdown)
         
         speed_dir = os.path.join(self.working_dir, 'speed')
         if not self.is_multi_process:
@@ -160,7 +175,10 @@ class Job(object):
                                                      self.n_instances, self.stopped,
                                                      self.rpc_server, self.job_name,
                                                      self.counter_server, self.ctx.ips)
-        self.shutdown_callbacks.append(self.speed_server.shutdown)
+        def speed_shutdown():
+            self.logger.debug('shutdown speed server')
+            self.speed_server.shutdown()
+        self.shutdown_callbacks.append(speed_shutdown)
         
     def init_functions(self):
         if self.ctx.is_local_mode:
@@ -246,11 +264,15 @@ class Job(object):
         [container.wait_for_stop() for container in self.containers]
         
     def shutdown(self):
-        self.stopped.set()
-        self.wait_for_stop()
-        for cb in self.shutdown_callbacks():
-            cb()
-        os.remove(self.lock_file)
+        try:
+            self.stopped.set()
+            self.wait_for_stop()
+            for cb in self.shutdown_callbacks:
+                cb()
+            self.logger.debug('shutdown finished')
+        finally:
+            if os.path.exists(self.lock_file):
+                os.remove(self.lock_file)
             
     def suspend(self):
         self.nonsuspend.clear()

@@ -23,7 +23,7 @@ import tempfile
 import threading
 import shutil
 
-from cola.context import Settings
+from cola.settings import Settings
 from cola.core.rpc import ColaRPCServer
 from cola.functions.budget import BudgetApplyClient, BudgetApplyServer
 from cola.functions.counter import CounterClient, CounterServer

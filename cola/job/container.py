@@ -21,6 +21,7 @@ Created on 2014-5-17
 '''
 
 import os
+import multiprocessing
 import threading
 
 from cola.core.utils import import_job_desc, get_ip
@@ -65,7 +66,7 @@ class Container(object):
         self.task_threads = []
         
         self.inited = False
-        self.lock = threading.Lock()
+        self.lock = multiprocessing.Lock()
         
     def init(self):
         with self.lock:

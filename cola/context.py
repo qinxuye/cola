@@ -25,6 +25,7 @@ import tempfile
 import multiprocessing
 import signal
 import threading
+import shutil
 
 from cola.core.config import Config
 from cola.core.utils import get_ip, import_job_desc
@@ -84,19 +85,32 @@ class Context(object):
         self.env = self.manager.dict({'ip': self.ip, 
                                       'root': self.working_dir})
         
-    def _run_local_job(self, job_path, overwrite=False):
-        job_desc = import_job_desc(job_path)
-        base_name = job_desc.uniq_name
-        job_name = base_name
-        working_dir = os.path.join(self.working_dir, 'worker', job_name)
-            
+    def _get_name_and_dir(self, working_dir, job_name, 
+                          overwrite=False, clear=False):
+        if clear:
+            if os.path.exists(working_dir):
+                shutil.rmtree(working_dir)
+                
         if overwrite:
+            base_name = job_name
             idx = 1
             while os.path.exists(working_dir):
                 job_name = '%s%s' % (base_name, idx)
                 working_dir = os.path.join(self.working_dir, job_name)
                 idx += 1
-            
+                
+        return job_name, working_dir
+
+        
+    def _run_local_job(self, job_path, overwrite=False, clear=False):
+        job_desc = import_job_desc(job_path)
+        base_name = job_desc.uniq_name
+        
+        job_name = base_name
+        working_dir = os.path.join(self.working_dir, 'worker', job_name)
+        job_name, working_dir = self._get_name_and_dir(
+            working_dir, job_name, overwrite=overwrite, clear=clear)
+                    
         job = Job(self, job_path, job_name=job_name, job_desc=job_desc,
                       working_dir=working_dir)
         t = threading.Thread(target=job.run, args=(True, ))
@@ -109,6 +123,7 @@ class Context(object):
         
         t.join()
         
-    def run_job(self, job_path, overwrite=False):
+    def run_job(self, job_path, overwrite=False, clear=False):
         if self.is_local_mode:
-            self._run_local_job(job_path, overwrite=overwrite)
+            self._run_local_job(job_path, overwrite=overwrite,
+                                clear=clear)

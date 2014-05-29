@@ -26,3 +26,4 @@ job:
   starts:
     - url: http://en.wikipedia.org/wiki/Python
     - url: http://zh.wikipedia.org/wiki/Python
+  clear: no

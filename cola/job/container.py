@@ -73,7 +73,8 @@ class Container(object):
             if self.inited: return
             
             self.log_file = os.path.join(self.working_dir, 'job.log')
-            self.logger = self.logger or get_logger(filename=self.log_file, 
+            self.logger = self.logger or get_logger(name='cola_task',
+                                                    filename=self.log_file, 
                                                     server=self.master_ip)
             
             for i in range(self.n_tasks):

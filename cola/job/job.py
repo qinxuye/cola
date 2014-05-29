@@ -266,6 +266,7 @@ class Job(object):
     def shutdown(self):
         try:
             self.stopped.set()
+            
             self.wait_for_stop()
             for cb in self.shutdown_callbacks:
                 cb()

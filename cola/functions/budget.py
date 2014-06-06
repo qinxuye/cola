@@ -29,7 +29,6 @@ except ImportError:
 
 from cola.core.utils import get_rpc_prefix
 from cola.core.rpc import client_call
-from cola.functions import MpFunctionServer
 
 FUNC_PREFIX = "budget_apply_"
 
@@ -94,6 +93,9 @@ class BudgetApplyServer(object):
             self.status = ALLFINISHED
         else:
             raise RuntimeError('size of applied and finished is impossible')
+        
+    def get_status(self):
+        return self.status
     
     def shutdown(self):
         self.save()
@@ -151,17 +153,6 @@ class BudgetApplyServer(object):
         self.applied = max(self.applied, self.finished)
         self.set_status()
         
-class MpBudgetApplyServer(BudgetApplyServer, MpFunctionServer):
-    def __init__(self, working_dir, settings, instances,
-                 stopped, rpc_server=None, app_name=None):
-        BudgetApplyServer.__init__(self,
-            working_dir, settings,
-            rpc_server=rpc_server, app_name=app_name)
-        MpFunctionServer.__init__(self, instances, stopped)
-        
-    def shutdown(self):
-        BudgetApplyServer.shutdown(self)
-        MpFunctionServer.join(self)
         
 class BudgetApplyClient(object):
     def __init__(self, server, app_name=None):
@@ -169,13 +160,10 @@ class BudgetApplyClient(object):
         self.prefix = get_rpc_prefix(app_name, FUNC_PREFIX)
         
     def _call(self, func, *args):
-        if isinstance(self.server, BudgetApplyServer):
-            return getattr(self.server, func)(*args)
-        elif isinstance(self.server, basestring):
+        if isinstance(self.server, basestring):
             return client_call(self.server, self.prefix+func, *args)
         else:
-            self.server.send((func, args))
-            return self.server.recv()
+            return getattr(self.server, func)(*args)
         
     def apply(self, budget):
         return self._call('apply', budget)

@@ -23,13 +23,14 @@ Created on 2014-2-7
 import os
 import tempfile
 import multiprocessing
-import signal
 import threading
+import signal
 import shutil
 
 from cola.core.config import Config
 from cola.core.utils import get_ip, import_job_desc
-from cola.job import Job
+from cola.core.logs import get_logger
+from cola.job import Job, FINISHED
 
 conf_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'conf')
 main_conf = Config(os.path.join(conf_dir, 'main.yaml'))
@@ -83,7 +84,10 @@ class Context(object):
             
         self.manager = multiprocessing.Manager()
         self.env = self.manager.dict({'ip': self.ip, 
-                                      'root': self.working_dir})
+                                      'root': self.working_dir,
+                                      'is_local': self.is_local_mode, 
+                                      'master_ip': self.master_ip})
+        self.logger = get_logger('context')
         
     def _get_name_and_dir(self, working_dir, job_name, 
                           overwrite=False, clear=False):
@@ -112,16 +116,24 @@ class Context(object):
             working_dir, job_name, overwrite=overwrite, clear=clear)
                     
         job = Job(self, job_path, job_name=job_name, job_desc=job_desc,
-                      working_dir=working_dir)
+                  working_dir=working_dir)
         t = threading.Thread(target=job.run, args=(True, ))
         t.start()
         
         def stop(signum, frame):
+            if 'main' not in multiprocessing.current_process().name.lower():
+                return
             job.shutdown()
+            
         signal.signal(signal.SIGINT, stop)
         signal.signal(signal.SIGTERM, stop)
         
-        t.join()
+        while job.get_status() != FINISHED and t.is_alive():
+            t.join(5)
+        def clear():
+            self.logger.debug('All objects have been fetched, try to finish job')
+            job.shutdown()
+        clear()
         
     def run_job(self, job_path, overwrite=False, clear=False):
         if self.is_local_mode:

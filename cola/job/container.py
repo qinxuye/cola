@@ -32,9 +32,9 @@ from cola.functions.speed import SpeedControlClient
 from cola.functions.counter import CounterClient
 
 class Container(object):
-    def __init__(self, container_id, working_dir, mq,
-                 job_path, env, job_name,
-                 counters, budgets, speeds,
+    def __init__(self, container_id, working_dir, 
+                 job_path, job_name, env, mq,
+                 counter_server, budget_server, speed_server,
                  stopped, nonsuspend, n_tasks=1, 
                  is_local=False, master_ip=None, logger=None,
                  task_start_id=0):
@@ -45,9 +45,9 @@ class Container(object):
         self.env = env
         self.job_name = job_name
         
-        self.counters = counters
-        self.budgets = budgets
-        self.speeds = speeds
+        self.counter_server = counter_server
+        self.budget_server = budget_server
+        self.speed_server = speed_server
         
         self.stopped = stopped
         self.nonsuspend = nonsuspend
@@ -78,11 +78,11 @@ class Container(object):
                                                     server=self.master_ip)
             
             for i in range(self.n_tasks):
-                self.counter_clients[i] = CounterClient(self.counters[i],
+                self.counter_clients[i] = CounterClient(self.counter_server,
                                                         app_name=self.job_name)
-                self.budget_clients[i] = BudgetApplyClient(self.budgets[i],
+                self.budget_clients[i] = BudgetApplyClient(self.budget_server,
                                                            app_name=self.job_name)
-                self.speed_clients[i] = SpeedControlClient(self.speeds[i], self.ip,
+                self.speed_clients[i] = SpeedControlClient(self.speed_server, self.ip,
                                                            self.task_start_id+i,
                                                            app_name=self.job_name)
             self.init_tasks()

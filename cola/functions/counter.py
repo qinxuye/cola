@@ -30,7 +30,6 @@ except ImportError:
 from cola.core.counter import Counter, MergeAggregator
 from cola.core.rpc import client_call
 from cola.core.utils import get_rpc_prefix
-from cola.functions import MpFunctionServer
 
 FUNC_PREFIX = 'counter_'
 COUNTER_STATUS_FILENAME = 'counter.status'
@@ -97,17 +96,8 @@ class CounterServer(object):
         counter = Counter(agg=self.acc_counter.agg, container=vals)
         self.acc_counter.merge(counter)
         
-class MpCounterServer(CounterServer, MpFunctionServer):
-    def __init__(self, working_dir, settings, instances, stopped,
-                 rpc_server=None, app_name=None, dict_cls=dict):
-        CounterServer.__init__(self, working_dir, settings, 
-                               rpc_server=rpc_server, app_name=app_name, 
-                               dict_cls=dict_cls)
-        MpFunctionServer.__init__(self, instances, stopped)
-        
-    def shutdown(self):
-        CounterServer.shutdown(self)
-        MpFunctionServer.join(self)
+    def output(self):
+        return self.inc_counter.container.get('global', {})
         
 class CounterClient(object):
     def __init__(self, server, app_name=None):
@@ -173,14 +163,9 @@ class CounterClient(object):
             if isinstance(self.server, basestring):
                 client_call(self.server, 'inc_merge', self.inc_counter.container)
                 client_call(self.server, 'acc_merge', self.acc_counter.container)
-            elif isinstance(self.server, CounterServer):
+            else:
                 self.server.inc_merge(self.inc_counter.container)
                 self.server.acc_merge(self.acc_counter.container)
-            else:
-                self.server.send(('inc_merge', (self.inc_counter.container, )))
-                self.server.receive()
-                self.server.send(('acc_merge', (self.acc_counter.container, )))
-                self.server.receive()
             self.inc_counter.reset()
             self.acc_counter.reset()
     

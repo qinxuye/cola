@@ -19,38 +19,3 @@ Created on 2014-2-7
 
 @author: Chine
 '''
-
-import multiprocessing
-import threading
-
-class MpFunctionServer(object):
-    def __init__(self, instances, stopped):
-        self.stopped = stopped
-        self.clients = []
-        self.threads = []
-        for _ in range(instances):
-            agent, client = multiprocessing.Pipe()
-            self.clients.append(client)
-            t = threading.Thread(target=self._init_agent, args=(agent, ))
-            t.setDaemon(True)
-            self.threads.append(t)
-            t.start()
-            
-    def join(self):
-        for t in self.threads:
-            t.join()
-        
-    def _init_agent(self, agent):
-        try:
-            while not self.stopped.is_set():
-                need_process = agent.poll(10)
-                if not need_process:
-                    continue
-                
-                func, args = agent.recv()
-                agent.send(getattr(self, func)(*args))
-        finally:
-            agent.close()
-            
-    def get_pipe(self, instance_id):
-        return self.clients[instance_id]

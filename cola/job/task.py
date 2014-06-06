@@ -112,6 +112,8 @@ class Task(object):
             else:
                 running = self.mq.get_inc(priority=priority)
             if running:
+                if isinstance(running, str):
+                    running = self.job_desc.unit_cls(running)
                 runnings.append(running)
         
     def run(self):
@@ -162,4 +164,5 @@ class Task(object):
                     
                 curr_priority = (curr_priority+1) % self.full_priorities
         finally:
+            self.counter_client.sync()
             self.save()

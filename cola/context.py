@@ -130,10 +130,9 @@ class Context(object):
         
         while job.get_status() != FINISHED and t.is_alive():
             t.join(5)
-        def clear():
+        if job.get_status() == FINISHED:
             self.logger.debug('All objects have been fetched, try to finish job')
             job.shutdown()
-        clear()
         
     def run_job(self, job_path, overwrite=False, clear=False):
         if self.is_local_mode:

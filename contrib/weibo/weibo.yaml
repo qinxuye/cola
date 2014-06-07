@@ -33,3 +33,4 @@ job:
     forward: no
     comment: no
     like: no
+  clear: no

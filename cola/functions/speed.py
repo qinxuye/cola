@@ -144,6 +144,7 @@ class SpeedControlServer(object):
         if self._need_rate_service() and \
             not self.rate_service_stated:
             self.rate_service_stated = True
+            self.calc_spans()
             t = threading.Thread(target=clear)
             t.setDaemon(True)
             t.start()

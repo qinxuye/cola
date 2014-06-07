@@ -158,5 +158,4 @@ def get_job_desc():
 if __name__ == "__main__":
     from cola.context import Context
     ctx = Context(local_mode=True)
-    ctx.run_job(os.path.dirname(os.path.abspath(__file__)), 
-                clear=user_config.job.clear)
+    ctx.run_job(os.path.dirname(os.path.abspath(__file__)))

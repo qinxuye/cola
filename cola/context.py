@@ -106,12 +106,13 @@ class Context(object):
         return job_name, working_dir
 
         
-    def _run_local_job(self, job_path, overwrite=False, clear=False):
+    def _run_local_job(self, job_path, overwrite=False):
         job_desc = import_job_desc(job_path)
         base_name = job_desc.uniq_name
         
         job_name = base_name
         working_dir = os.path.join(self.working_dir, 'worker', job_name)
+        clear = job_desc.settings.job.clear
         job_name, working_dir = self._get_name_and_dir(
             working_dir, job_name, overwrite=overwrite, clear=clear)
                     
@@ -134,7 +135,6 @@ class Context(object):
             self.logger.debug('All objects have been fetched, try to finish job')
             job.shutdown()
         
-    def run_job(self, job_path, overwrite=False, clear=False):
+    def run_job(self, job_path, overwrite=False):
         if self.is_local_mode:
-            self._run_local_job(job_path, overwrite=overwrite,
-                                clear=clear)
+            self._run_local_job(job_path, overwrite=overwrite)

@@ -36,6 +36,7 @@ from cola.core.mq import MessageQueue
 from cola.core.dedup import FileBloomFilterDeduper
 from cola.core.unit import Bundle, Url
 from cola.core.logs import get_logger
+from cola.core.utils import is_windows
 from cola.settings import Settings
 from cola.functions.budget import BudgetApplyServer, ALLFINISHED
 from cola.functions.speed import SpeedControlServer
@@ -136,8 +137,10 @@ class Job(object):
         self.rpc_server = rpc_server
         
         self.n_instances = self.job_desc.settings.job.instances
-        self.n_containers = min(get_cpu_count(), max(self.n_instances, 1))
-        self.is_multi_process = self.n_containers > 1
+        self.n_containers = min(get_cpu_count(), max(self.n_instances, 1)) \
+                                if not is_windows() else 1
+        self.is_multi_process = self.n_containers > 1 \
+                                    if not is_windows() else False
         self.processes = []
         
         def handler(signum, frame):
@@ -147,16 +150,15 @@ class Job(object):
             
         def manager_init():
             signal.signal(signal.SIGINT, handler)
-        self.manager = JobManager()
-        self.manager.start(manager_init)
+            
+        if not is_windows():
+            self.manager = JobManager()
+            self.manager.start(manager_init)
         
         if not os.path.exists(self.working_dir):
             os.makedirs(self.working_dir)
         self.inited = False
         self.is_shutdown = False
-        
-    def get_job_env(self):
-        return self.job_env
         
     def init_deduper(self):
         base = 1 if not self.is_bundle else 1000
@@ -273,7 +275,8 @@ class Job(object):
             
             for cb in self.shutdown_callbacks:
                 cb()
-            self.manager.shutdown()
+            if hasattr(self, 'manager'):
+                self.manager.shutdown()
             self.status = FINISHED
             self.logger.debug('Shutdown finished')
         finally:

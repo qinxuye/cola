@@ -24,7 +24,7 @@ except ImportError:
     from cStringIO import StringIO
 
 from cola.core.config import Config
-from cola.job.context import Context
+from cola.settings import Settings
 
 class Test(unittest.TestCase):
 
@@ -34,12 +34,11 @@ class Test(unittest.TestCase):
 
 
     def testContext(self):
-        context = Context(user_conf=self.simulate_user_conf, 
-                          description='This is a just unittest')
-        self.assertEqual(context.name, 'cola-unittest')
-        self.assertEqual(context.description, 'This is a just unittest')
-        self.assertEqual(context.job.db, 'cola')
-        self.assertEqual(context.job.port, 12103)
+        settings = Settings(user_conf=self.simulate_user_conf, 
+                           description='This is a just unittest')
+        self.assertEqual(settings.name, 'cola-unittest')
+        self.assertEqual(settings.description, 'This is a just unittest')
+        self.assertEqual(settings.job.db, 'cola')
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

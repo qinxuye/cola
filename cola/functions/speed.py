@@ -68,7 +68,6 @@ class SpeedControlServer(object):
         self.app_name = app_name
         self.counter_server = counter_server
         self.addrs = addrs
-        self.prefix = get_rpc_prefix(self.app_name, FUNC_PREFIX)
         
         self.speed = self.settings.job.speed.max
         self.instance_speed = self.settings.job.speed.single
@@ -100,13 +99,17 @@ class SpeedControlServer(object):
         
     def _register_rpc(self):
         if self.rpc_server is not None:
-            self.rpc_server.register_function(self.require, 'require', 
-                                              prefix=self.prefix)
-            self.rpc_server.register_function(self.set_speed, 'set_speed',
-                                              prefix=self.prefix)
-            self.rpc_server.register_function(self.set_instance_speed, 
-                                              'set_instance_speed', 
-                                              prefix=self.prefix)
+            self.register_rpc(self, self.rpc_server, self.app_name)
+            
+    @classmethod
+    def register_rpc(cls, speed_server, rpc_server, app_name=None):
+        prefix = get_rpc_prefix(app_name, FUNC_PREFIX)
+        rpc_server.register_function(speed_server.require, 'require', 
+                                     prefix=prefix)
+        rpc_server.register_function(speed_server.set_speed, 'set_speed',
+                                     prefix=prefix)
+        rpc_server.register_function(speed_server.set_instance_speed, 
+                                     'set_instance_speed', prefix=prefix)
         
     def load(self):
         save_file = os.path.join(self.dir_, SPEED_CONTROL_STATUS_FILENAME)

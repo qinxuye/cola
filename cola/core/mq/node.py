@@ -92,17 +92,22 @@ class LocalMessageQueueNode(object):
         
     def _register_rpc(self):
         if self.rpc_server:
-            prefix = get_rpc_prefix(self.app_name, 'mq')
-            self.rpc_server.register_function(self.put_proxy, name='put', 
-                                              prefix=prefix)
-            self.rpc_server.register_function(self.batch_put_proxy, name='batch_put', 
-                                              prefix=prefix)
-            self.rpc_server.register_function(self.put_backup_proxy, name='put_backup',
-                                              prefix=prefix)
-            self.rpc_server.register_function(self.get_proxy, name='get',
-                                              prefix=prefix)
-            self.rpc_server.register_function(self.exist, name='exist',
-                                              prefix=prefix)
+            self.register_rpc(self, self.rpc_server, app_name=self.app_name)
+                
+    @classmethod
+    def register_rpc(cls, node, rpc_server, app_name=None):
+        prefix = get_rpc_prefix(app_name, 'mq')
+        rpc_server.register_function(node.put_proxy, name='put', 
+                                     prefix=prefix)
+        rpc_server.register_function(node.batch_put_proxy, name='batch_put', 
+                                     prefix=prefix)
+        rpc_server.register_function(node.put_backup_proxy, name='put_backup',
+                                     prefix=prefix)
+        rpc_server.register_function(node.get_proxy, name='get',
+                                     prefix=prefix)
+        rpc_server.register_function(node.exist, name='exist',
+                                     prefix=prefix)
+
         
     def put(self, objs, force=False, priority=0):
         self.init()

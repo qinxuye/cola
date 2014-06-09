@@ -41,7 +41,6 @@ class CounterServer(object):
         self.settings = settings
         self.rpc_server = rpc_server
         self.app_name = app_name
-        self.prefix = get_rpc_prefix(self.app_name, FUNC_PREFIX)
         self.dict_cls = dict_cls
         
         self.inc_counter = Counter(container=dict_cls())
@@ -56,14 +55,19 @@ class CounterServer(object):
         
     def _register_rpc(self):
         if self.rpc_server is not None:
-            self.rpc_server.register_function(self.inc, 'inc', 
-                                              prefix=self.prefix)
-            self.rpc_server.register_function(self.acc, 'acc',
-                                              prefix=self.prefix)
-            self.rpc_server.register_function(self.inc_merge, 'inc_merge',
-                                              prefix=self.prefix)
-            self.rpc_server.register_function(self.acc_merge, 'acc_merge',
-                                              prefix=self.prefix)
+            self.register_rpc(self, self.rpc_server, app_name=self.app_name)
+                
+    @classmethod
+    def register_rpc(cls, counter_server, rpc_server, app_name=None):
+        prefix = get_rpc_prefix(app_name, FUNC_PREFIX)
+        rpc_server.register_function(counter_server.inc, 'inc', 
+                                     prefix=prefix)
+        rpc_server.register_function(counter_server.acc, 'acc',
+                                     prefix=prefix)
+        rpc_server.register_function(counter_server.inc_merge, 'inc_merge',
+                                     prefix=prefix)
+        rpc_server.register_function(counter_server.acc_merge, 'acc_merge',
+                                     prefix=prefix)
     
     def shutdown(self):
         self.save()

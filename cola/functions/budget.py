@@ -50,7 +50,6 @@ class BudgetApplyServer(object):
         self.settings = settings
         self.rpc_server = rpc_server
         self.app_name = app_name
-        self.prefix = get_rpc_prefix(self.app_name, FUNC_PREFIX)
         
         self.budgets = settings.job.size
         self.limit = self.budgets >= 0
@@ -68,18 +67,23 @@ class BudgetApplyServer(object):
         
     def _register_rpc(self):
         if self.rpc_server is not None:
-            self.rpc_server.register_function(self.set_budgets, 
-                                              name='set_budgets', prefix=self.prefix)
-            self.rpc_server.register_function(self.inc_budgets, 
-                                              name='inc_budgets', prefix=self.prefix)
-            self.rpc_server.register_function(self.dec_budgets, 
-                                              name='dec_budgets', prefix=self.prefix)
-            self.rpc_server.register_function(self.apply, 
-                                              name='apply', prefix=self.prefix)
-            self.rpc_server.register_function(self.finish, 
-                                              name='finish', prefix=self.prefix)
-            self.rpc_server.register_function(self.error, 
-                                              name='error', prefix=self.prefix)
+            self.register_rpc(self, self.rpc_server, app_name=self.app_name)
+            
+    @classmethod
+    def register_rpc(cls, budget_server, rpc_server, app_name=None):
+        prefix = get_rpc_prefix(app_name=app_name, prefix=FUNC_PREFIX)
+        rpc_server.register_function(budget_server.set_budgets, 
+                                     name='set_budgets', prefix=prefix)
+        rpc_server.register_function(budget_server.inc_budgets, 
+                                     name='inc_budgets', prefix=prefix)
+        rpc_server.register_function(budget_server.dec_budgets, 
+                                     name='dec_budgets', prefix=prefix)
+        rpc_server.register_function(budget_server.apply, 
+                                     name='apply', prefix=prefix)
+        rpc_server.register_function(budget_server.finish, 
+                                     name='finish', prefix=prefix)
+        rpc_server.register_function(budget_server.error, 
+                                     name='error', prefix=prefix)
             
     def set_status(self):
         assert self.finished <= self.applied

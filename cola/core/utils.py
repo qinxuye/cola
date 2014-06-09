@@ -26,6 +26,7 @@ import sys
 import urllib
 import multiprocessing
 import time
+import platform
 
 from cola.core.errors import DependencyNotInstalledError
 
@@ -138,6 +139,12 @@ def base58_encode(num, alphabet=ALPHABET):
 
 def get_cpu_count():
     return multiprocessing.cpu_count()
+
+def get_os_name():
+    return platform.system()
+
+def is_windows():
+    return get_os_name() == 'Windows'
 
 class Clock(object):
     def __init__(self, start=None):

@@ -37,6 +37,9 @@ class Url(Unit):
         
     def __str__(self):
         return self.url
+    
+    def __eq__(self, url):
+        return self.url == url.url
 
 class Bundle(Unit):
     '''

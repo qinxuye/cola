@@ -30,10 +30,30 @@ import shutil
 from cola.core.config import Config
 from cola.core.utils import get_ip, import_job_desc
 from cola.core.logs import get_logger
+from cola.core.mq import MessageQueue
+from cola.core.dedup import FileBloomFilterDeduper
+from cola.core.rpc import ThreadedColaRPCServer
+from cola.functions.budget import BudgetApplyServer
+from cola.functions.speed import SpeedControlServer
+from cola.functions.counter import CounterServer
 from cola.job import Job, FINISHED
 
 conf_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'conf')
 main_conf = Config(os.path.join(conf_dir, 'main.yaml'))
+
+class ContextManager(multiprocessing.managers.SyncManager):
+    pass
+ContextManager.register('deduper', FileBloomFilterDeduper)
+ContextManager.register('mq', MessageQueue)
+ContextManager.register('budget_server', BudgetApplyServer)
+ContextManager.register('speed_server', SpeedControlServer)
+ContextManager.register('counter_server', CounterServer)
+
+def handler(signum, frame):
+    pass
+            
+def manager_init():
+    signal.signal(signal.SIGINT, handler)
                 
 class Context(object):
     def __init__(self, local_mode=False, is_master=False, master=None, 
@@ -82,7 +102,8 @@ class Context(object):
         self.ips = [fix_ip(address) for address in self.addrs]
         self.addrs = [fix_addr(address) for address in self.addrs]
             
-        self.manager = multiprocessing.Manager()
+        self.manager = ContextManager()
+        self.manager.start(manager_init)
         self.env = self.manager.dict({'ip': self.ip, 
                                       'root': self.working_dir,
                                       'is_local': self.is_local_mode, 
@@ -106,7 +127,7 @@ class Context(object):
         return job_name, working_dir
 
         
-    def _run_local_job(self, job_path, overwrite=False):
+    def _run_local_job(self, job_path, overwrite=False, rpc_server=None):
         job_desc = import_job_desc(job_path)
         base_name = job_desc.uniq_name
         
@@ -117,14 +138,18 @@ class Context(object):
             working_dir, job_name, overwrite=overwrite, clear=clear)
                     
         job = Job(self, job_path, job_name=job_name, job_desc=job_desc,
-                  working_dir=working_dir)
+                  working_dir=working_dir, rpc_server=rpc_server,
+                  manager=self.manager)
         t = threading.Thread(target=job.run, args=(True, ))
         t.start()
         
         def stop(signum, frame):
             if 'main' not in multiprocessing.current_process().name.lower():
                 return
+            self.logger.debug("Catch interrupt signal, start to stop")
             job.shutdown()
+            if rpc_server:
+                rpc_server.shutdown()
             
         signal.signal(signal.SIGINT, stop)
         signal.signal(signal.SIGTERM, stop)
@@ -134,7 +159,14 @@ class Context(object):
         if job.get_status() == FINISHED:
             self.logger.debug('All objects have been fetched, try to finish job')
             job.shutdown()
+            if rpc_server:
+                rpc_server.shutdown()
         
-    def run_job(self, job_path, overwrite=False):
+    def run_job(self, job_path, overwrite=False, init_rpc=False):
+        rpc_server = None
+        if init_rpc:
+            rpc_server = ThreadedColaRPCServer((self.ip, main_conf.worker.port))
+            
         if self.is_local_mode:
-            self._run_local_job(job_path, overwrite=overwrite)
+            self._run_local_job(job_path, overwrite=overwrite, 
+                                rpc_server=rpc_server)

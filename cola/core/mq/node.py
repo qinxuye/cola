@@ -118,7 +118,7 @@ class LocalMessageQueueNode(object):
         
     def put_proxy(self, pickled_objs, force=False, priority=0):
         objs = pickle.loads(pickled_objs)
-        self.put(objs, force=force, prioirity=priority)
+        self.put(objs, force=force, priority=priority)
         
     def batch_put(self, objs):
         self.init()
@@ -222,6 +222,11 @@ class MessageQueueNodeProxy(object):
         
         self._lock = threading.Lock()
         self.inited = False
+        
+    @classmethod
+    def register_rpc(cls, node, rpc_server, app_name=None):
+        LocalMessageQueueNode.register_rpc(node.mq_node, rpc_server, 
+                                           app_name=app_name)
         
     def init(self):
         with self._lock:

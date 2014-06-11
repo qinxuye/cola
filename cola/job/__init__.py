@@ -32,7 +32,7 @@ import pprint
 from cola.core.errors import ConfigurationError
 from cola.core.utils import base58_encode, get_cpu_count, \
                             import_job_desc
-from cola.core.mq import MessageQueue
+from cola.core.mq import MessageQueue, MessageQueueRPCProxy
 from cola.core.dedup import FileBloomFilterDeduper
 from cola.core.unit import Bundle, Url
 from cola.core.logs import get_logger
@@ -48,13 +48,6 @@ UNLIMIT_BLOOM_FILTER_CAPACITY = 1000000
 NOTSTARTED, RUNNING, FINISHED = range(3)
 
 class JobRunning(Exception): pass
-
-class JobManager(multiprocessing.managers.BaseManager): pass
-JobManager.register('deduper', FileBloomFilterDeduper)
-JobManager.register('mq', MessageQueue)
-JobManager.register('budget_server', BudgetApplyServer)
-JobManager.register('speed_server', SpeedControlServer)
-JobManager.register('counter_server', CounterServer)
 
 class JobDescription(object):
     def __init__(self, name, url_patterns, opener_cls, user_conf, starts, 
@@ -115,7 +108,8 @@ def run_containers(n_containers, n_instances, working_dir, job_def_path,
         
 class Job(object):
     def __init__(self, ctx, job_def_path, job_name=None, 
-                 job_desc=None, working_dir=None, rpc_server=None):
+                 job_desc=None, working_dir=None, rpc_server=None,
+                 manager=None):
         self.status = NOTSTARTED
         self.ctx = ctx
         self.shutdown_callbacks = []
@@ -142,18 +136,9 @@ class Job(object):
         self.is_multi_process = self.n_containers > 1 \
                                     if not is_windows() else False
         self.processes = []
-        
-        def handler(signum, frame):
-            if self.is_multi_process:
-                self.logger.debug("Catch interrupt signal, start to stop")
-                self.stopped.set()
-            
-        def manager_init():
-            signal.signal(signal.SIGINT, handler)
             
         if not is_windows():
-            self.manager = JobManager()
-            self.manager.start(manager_init)
+            self.manager = manager
         
         if not os.path.exists(self.working_dir):
             os.makedirs(self.working_dir)
@@ -182,8 +167,11 @@ class Job(object):
               'n_priorities': n_priorities, 'deduper': self.deduper}
         mq_cls = MessageQueue if not self.is_multi_process \
                     else self.manager.mq
-        self.mq = mq_cls(mq_dir, self.rpc_server, self.ctx.addr, 
+        self.mq = mq_cls(mq_dir, None, self.ctx.addr, 
             self.ctx.addrs, **kw)
+        if self.rpc_server:
+            self.proxy = MessageQueueRPCProxy(self.mq.get_connection(), 
+                                              self.rpc_server)
         # register shutdown callback
         self.shutdown_callbacks.append(self.mq.shutdown)
         
@@ -192,15 +180,20 @@ class Job(object):
         budget_cls =  BudgetApplyServer if not self.is_multi_process \
                         else self.manager.budget_server
         self.budget_server = budget_cls(budget_dir, self.settings, 
-                                        self.rpc_server, self.job_name)
-        
+                                        None, self.job_name)
+        if self.rpc_server:
+            BudgetApplyServer.register_rpc(self.budget_server, self.rpc_server, 
+                                           app_name=self.job_name)
         self.shutdown_callbacks.append(self.budget_server.shutdown)
         
         counter_dir = os.path.join(self.working_dir, 'counter')
         counter_cls = CounterServer if not self.is_multi_process \
                         else self.manager.counter_server
         self.counter_server = counter_cls(counter_dir, self.settings,
-                                          self.rpc_server, self.job_name)
+                                          None, self.job_name)
+        if self.rpc_server:
+            CounterServer.register_rpc(self.counter_server, self.rpc_server, 
+                                       app_name=self.job_name)
         
         self.shutdown_callbacks.append(self.counter_server.shutdown)
         
@@ -208,9 +201,11 @@ class Job(object):
         speed_cls = SpeedControlServer if not self.is_multi_process \
                         else self.manager.speed_server
         self.speed_server = speed_cls(speed_dir, self.settings,
-                                      self.rpc_server, self.job_name,
+                                      None, self.job_name,
                                       self.counter_server, self.ctx.ips)
-
+        if self.rpc_server:
+            SpeedControlServer.register_rpc(self.speed_server, self.rpc_server, 
+                                            app_name=self.job_name)
         self.shutdown_callbacks.append(self.speed_server.shutdown)
         
     def init_functions(self):

@@ -27,6 +27,11 @@ import urllib
 import multiprocessing
 import time
 import platform
+from multiprocessing.reduction import reduce_connection
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 from cola.core.errors import DependencyNotInstalledError
 
@@ -168,3 +173,10 @@ class Clock(object):
         
     def clock(self):
         return time.time() - self.start - self.acc_paused
+
+def pickle_connection(connection):
+    return pickle.dumps(reduce_connection(connection))
+
+def unpickle_connection(pickled_connection):
+    (func, args) = pickle.loads(pickled_connection)
+    return func(*args)

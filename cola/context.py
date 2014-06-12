@@ -155,7 +155,10 @@ class Context(object):
         signal.signal(signal.SIGTERM, stop)
         
         while job.get_status() != FINISHED and t.is_alive():
-            t.join(5)
+            try:
+                t.join(5)
+            except IOError:
+                break
         if job.get_status() == FINISHED:
             self.logger.debug('All objects have been fetched, try to finish job')
             job.shutdown()

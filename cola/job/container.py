@@ -30,6 +30,7 @@ from cola.job.task import Task
 from cola.functions.budget import BudgetApplyClient
 from cola.functions.speed import SpeedControlClient
 from cola.functions.counter import CounterClient
+from test.regrtest import INTERRUPTED
 
 class Container(object):
     def __init__(self, container_id, working_dir, 
@@ -133,5 +134,8 @@ class Container(object):
         if not self.inited: return
         
         for task in self.task_threads:
-            task.join()
+            try:
+                task.join()
+            except KeyboardInterrupt:
+                continue
         self.sync_t.join()

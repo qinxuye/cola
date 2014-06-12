@@ -36,7 +36,6 @@ from cola.core.mq import MessageQueue, MessageQueueRPCProxy
 from cola.core.dedup import FileBloomFilterDeduper
 from cola.core.unit import Bundle, Url
 from cola.core.logs import get_logger
-from cola.core.utils import is_windows
 from cola.settings import Settings
 from cola.functions.budget import BudgetApplyServer, ALLFINISHED
 from cola.functions.speed import SpeedControlServer
@@ -131,14 +130,11 @@ class Job(object):
         self.rpc_server = rpc_server
         
         self.n_instances = self.job_desc.settings.job.instances
-        self.n_containers = min(get_cpu_count(), max(self.n_instances, 1)) \
-                                if not is_windows() else 1
-        self.is_multi_process = self.n_containers > 1 \
-                                    if not is_windows() else False
+        self.n_containers = min(get_cpu_count(), max(self.n_instances, 1))
+        self.is_multi_process = self.n_containers > 1
         self.processes = []
             
-        if not is_windows():
-            self.manager = manager
+        self.manager = manager
         
         if not os.path.exists(self.working_dir):
             os.makedirs(self.working_dir)

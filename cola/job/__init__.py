@@ -32,7 +32,7 @@ import pprint
 from cola.core.errors import ConfigurationError
 from cola.core.utils import base58_encode, get_cpu_count, \
                             import_job_desc
-from cola.core.mq import MessageQueue, MessageQueueRPCProxy
+from cola.core.mq import MessageQueue, MpMessageQueueClient
 from cola.core.dedup import FileBloomFilterDeduper
 from cola.core.unit import Bundle, Url
 from cola.core.logs import get_logger
@@ -78,15 +78,22 @@ def run_containers(n_containers, n_instances, working_dir, job_def_path,
                    job_name, env, mq,
                    counter_server, budget_server, speed_server,
                    stopped, nonsuspend,
-                   block=False, is_multi_process=False):    
+                   block=False, is_multi_process=False):
     processes = []
     acc = 0
     for container_id in range(n_containers):
         n_tasks = n_instances / n_containers
         if container_id < n_instances % n_containers:
             n_tasks += 1
+        
+        if is_multi_process:
+            mq_client = mq
+        else:
+            conn = mq.new_connection(container_id)
+            mq_client = MpMessageQueueClient(conn)
+            
         container = Container(container_id, working_dir, job_def_path, job_name, 
-                              env, mq, counter_server, budget_server, speed_server,
+                              env, mq_client, counter_server, budget_server, speed_server,
                               stopped, nonsuspend, n_tasks=n_tasks,
                               task_start_id=acc)
         if is_multi_process:
@@ -161,13 +168,8 @@ class Job(object):
         
         kw = {'app_name': self.job_name, 'copies': copies, 
               'n_priorities': n_priorities, 'deduper': self.deduper}
-        mq_cls = MessageQueue if not self.is_multi_process \
-                    else self.manager.mq
-        self.mq = mq_cls(mq_dir, None, self.ctx.addr, 
+        self.mq = MessageQueue(mq_dir, self.rpc_server, self.ctx.addr, 
             self.ctx.addrs, **kw)
-        if self.rpc_server:
-            self.proxy = MessageQueueRPCProxy(self.mq.get_connection(), 
-                                              self.rpc_server)
         # register shutdown callback
         self.shutdown_callbacks.append(self.mq.shutdown)
         
@@ -247,10 +249,6 @@ class Job(object):
     def shutdown(self):
         if 'main' not in multiprocessing.current_process().name.lower():
             return
-        if self.is_shutdown:
-            return
-        else:
-            self.is_shutdown = True
             
         try:
             self.stopped.set()

@@ -28,7 +28,7 @@ import signal
 import shutil
 
 from cola.core.config import Config
-from cola.core.utils import get_ip, import_job_desc
+from cola.core.utils import get_ip, import_job_desc, Clock
 from cola.core.logs import get_logger
 from cola.core.mq import MessageQueue
 from cola.core.dedup import FileBloomFilterDeduper
@@ -137,6 +137,7 @@ class Context(object):
         job_name, working_dir = self._get_name_and_dir(
             working_dir, job_name, overwrite=overwrite, clear=clear)
                     
+        clock = Clock()
         job = Job(self, job_path, job_name=job_name, job_desc=job_desc,
                   working_dir=working_dir, rpc_server=rpc_server,
                   manager=self.manager)
@@ -159,11 +160,14 @@ class Context(object):
                 t.join(5)
             except IOError:
                 break
-        if job.get_status() == FINISHED:
+        if not job.stopped.is_set() and job.get_status() == FINISHED:
             self.logger.debug('All objects have been fetched, try to finish job')
             job.shutdown()
             if rpc_server:
                 rpc_server.shutdown()
+        
+        self.logger.debug('Job id:%s finished, spend %.2f seconds for running' % (
+            job_name, clock.clock()))
         
     def run_job(self, job_path, overwrite=False, init_rpc=False):
         rpc_server = None

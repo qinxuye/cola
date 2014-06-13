@@ -28,7 +28,7 @@ from cola.core.mq.client import MessageQueueClient
 from cola.core.utils import get_rpc_prefix, \
                             pickle_connection, unpickle_connection
 
-PUT, BATCH_PUT, PUT_BACKUP, GET, EXIST = range(5)
+PUT, PUT_INC, GET, GET_INC, EXIST = range(5)
 
 MessageQueueClient = MessageQueueClient
 
@@ -40,101 +40,82 @@ class MessageQueue(MessageQueueNodeProxy):
                                            copies=copies, n_priorities=n_priorities,
                                            deduper=deduper, app_name=app_name)
         
-        self.agent, self.client = multiprocessing.Pipe()
-        self._t = threading.Thread(target=self._init_agent, args=(self.agent, ))
-        self._t.start()
+        self.stopped = multiprocessing.Event()
+        self.agents = []
+        self.threads = []
+        self.clients = {}
         
-    def get_connection(self):
-        return pickle_connection(self.client)
+    def new_connection(self, k):
+        if k in self.clients: return self.clients[k]
         
-    def _init_agent(self, agent):
-        while True:
-            try:
-                need_process = agent.poll(10)
-                if not need_process:
-                    continue
-            
-                action, data = agent.recv()
-                if action == PUT:
-                    objs, force, priority = data
-                    self.mq_node.put_proxy(objs, force=force, 
-                                           priority=priority)
-                    agent.send(1)
-                elif action == BATCH_PUT:
-                    objs, = data
-                    self.mq_node.batch_put_proxy(objs)
-                    agent.send(1)
-                elif action == PUT_BACKUP:
-                    addr, objs, force = data
-                    self.mq_node.put_backup_proxy(addr, objs, force=force)
-                elif action == GET:
-                    size, priority = data
-                    agent.send(self.mq_node.get_proxy(size=size, 
-                                                      priority=priority))
-                elif action == EXIST:
-                    obj, = data
-                    agent.send(self.mq_node.exist(str(obj)))
-                else:
-                    raise ValueError('mq client can only put, put_inc, and get')
-            except IOError:
+        agent, client = multiprocessing.Pipe()
+        self.agents.append(agent)
+        _t = threading.Thread(target=self._init_process, args=(agent,))
+        self.threads.append(_t)
+        _t.start()
+        
+        self.clients[k] = client
+        return client
+    
+    def _init_process(self, agent):
+        while not self.stopped.is_set():
+            need_process = agent.poll(10)
+            if self.stopped.is_set():
                 return
+            if not need_process:
+                continue
+            
+            action, data = agent.recv()
+            if action == PUT:
+                objs, flush = data
+                self.put(objs, flush=flush)
+                agent.send(1)
+            elif action == PUT_INC:
+                self.put_inc(data)
+                agent.send(1)
+            elif action == GET:
+                size, priority = data
+                agent.send(self.get(size=size, 
+                                    priority=priority))
+            elif action == GET_INC:
+                agent.send(self.get_inc(data))
+            elif action == EXIST:
+                if not self.mq_node.deduper:
+                    agent.send(False)
+                else:
+                    agent.send(self.exist(str(data)))
+            else:
+                raise ValueError('mq client can only put, put_inc, and get')
+            
+    def _join(self):
+        [t.join() for t in self.threads]
             
     def shutdown(self):
         super(MessageQueue, self).shutdown()
-        self.agent.close()
-        self._t.join()
+        self.stopped.set()
+        self._join()
+        [agent.close() for agent in self.agents]
         
-class MessageQueueRPCProxy(object):
-    def __init__(self, connection, rpc_server=None, app_name=None):
-        self.client = unpickle_connection(connection)
-        self.rpc_server = rpc_server
-        self.app_name = app_name
-        self._register_rpc()
+class MpMessageQueueClient(object):
+    def __init__(self, conn):
+        self.conn = conn
         
-    def _register_rpc(self):
-        if self.rpc_server:
-            self.register_rpc(self, self.rpc_server, app_name=self.app_name)
-                
-    @classmethod
-    def register_rpc(cls, node, rpc_server, app_name=None):
-        prefix = get_rpc_prefix(app_name, 'mq')
-        rpc_server.register_function(node.put, name='put', 
-                                     prefix=prefix)
-        rpc_server.register_function(node.batch_put, name='batch_put', 
-                                     prefix=prefix)
-        rpc_server.register_function(node.put_backup, name='put_backup',
-                                     prefix=prefix)
-        rpc_server.register_function(node.get, name='get',
-                                     prefix=prefix)
-        rpc_server.register_function(node.exist, name='exist',
-                                     prefix=prefix)
+    def put(self, objs, flush=False):
+        self.conn.send((PUT, (objs, flush)))
+        self.conn.recv()
         
-    def _call(self, func_name, *args):
-        self.client.send((func_name, args))
-        while True:
-            try:
-                need_process = self.client.poll(10)
-                if not need_process:
-                    continue
-                
-                return self.client.recv()
-            except IOError:
-                return
-            
-    def put(self, objs, force=False, priority=0):
-        self._call(PUT, objs, force, priority)
-        
-    def batch_put(self, objs):
-        self._call(BATCH_PUT, objs)
-        
-    def put_backup(self, addr, objs, force=False):
-        self._call(PUT_BACKUP, addr, objs, force)
+    def put_inc(self, objs):
+        self.conn.send((PUT_INC, objs))
+        self.conn.recv()
         
     def get(self, size=1, priority=0):
-        result = self._call(GET, size, priority)
-        if size > 1 and result is None:
-            return []
-        return result
+        self.conn.send((GET, (size, priority)))
+        return self.conn.recv()
+    
+    def get_inc(self, size=1):
+        self.conn.send((GET_INC, size))
+        return self.conn.recv()
     
     def exist(self, obj):
-        return bool(self._call(EXIST, obj))
+        self.conn.send((EXIST, str(obj)))
+        return self.conn.recv()

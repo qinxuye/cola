@@ -30,7 +30,6 @@ from cola.job.task import Task
 from cola.functions.budget import BudgetApplyClient
 from cola.functions.speed import SpeedControlClient
 from cola.functions.counter import CounterClient
-from test.regrtest import INTERRUPTED
 
 class Container(object):
     def __init__(self, container_id, working_dir, 

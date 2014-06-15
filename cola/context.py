@@ -114,6 +114,7 @@ class Context(object):
         
     def _get_name_and_dir(self, working_dir, job_name, 
                           overwrite=False, clear=False):
+        working_dir = os.path.join(working_dir, job_name)
         if clear:
             if os.path.exists(working_dir):
                 shutil.rmtree(working_dir)
@@ -123,7 +124,8 @@ class Context(object):
             idx = 1
             while os.path.exists(working_dir):
                 job_name = '%s%s' % (base_name, idx)
-                working_dir = os.path.join(self.working_dir, job_name)
+                base_dir = os.path.dirname(working_dir)
+                working_dir = os.path.join(base_dir, job_name)
                 idx += 1
                 
         return job_name, working_dir
@@ -133,11 +135,10 @@ class Context(object):
         job_desc = import_job_desc(job_path)
         base_name = job_desc.uniq_name
         
-        job_name = base_name
-        working_dir = os.path.join(self.working_dir, 'worker', job_name)
+        working_dir = os.path.join(self.working_dir, 'worker')
         clear = job_desc.settings.job.clear
         job_name, working_dir = self._get_name_and_dir(
-            working_dir, job_name, overwrite=overwrite, clear=clear)
+            working_dir, base_name, overwrite=overwrite, clear=clear)
                     
         clock = Clock()
         job = Job(self, job_path, job_name=job_name, job_desc=job_desc,

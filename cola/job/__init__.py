@@ -155,6 +155,9 @@ class Job(object):
                                          prefix='job')
             self.rpc_server.register_function(self.shutdown, name='shutdown',
                                               prefix=self.prefix)
+            if self.ctx.is_local_mode:
+                self.rpc_server.register_function(lambda: [self.job_name, ],
+                                                  name='get_jobs')
         
     def init_deduper(self):
         base = 1 if not self.is_bundle else 1000

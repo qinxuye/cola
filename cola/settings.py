@@ -46,3 +46,9 @@ class Settings(object):
             if not k.startswith('_'):
                 setattr(self, k, getattr(dicts, k))
         self.values = dicts
+        
+    def update(self, settings):
+        self.values.update(settings)
+        for k in self.values:
+            if not k.startswith('_'):
+                setattr(self, k, getattr(self.values, k))

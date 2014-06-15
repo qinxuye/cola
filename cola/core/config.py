@@ -30,21 +30,32 @@ except ImportError:
     raise DependencyNotInstalledError('pyyaml')
 
 class PropertyObject(dict):
-    def __init__(self, d):
+    def __init__(self, d=None):
+        d = d or {}
         super(PropertyObject, self).__init__()
         self._update(d)
+        
+    def _set(self, k, v):
+        if isinstance(v, dict):
+            v = PropertyObject(v)
+        elif isinstance(v, list):
+            v = [PropertyObject(itm) for itm in v]
+        
+        if k not in self or type(self[k]) != type(v):
+            self[k] = v
+        elif isinstance(v, (PropertyObject, dict)):
+            self[k].update(**v)
+        elif isinstance(v, list):
+            self[k].extend(v)
+        else:
+            self[k] = v
+        
+        setattr(self, k, v)
         
     def _update(self, d):
         for k, v in d.iteritems():
             if not k.startswith('_'):
-                self[k] = v
-                
-                if isinstance(v, dict):
-                    setattr(self, k, PropertyObject(v))
-                elif isinstance(v, list):
-                    setattr(self, k, [PropertyObject(itm) for itm in v])
-                else:
-                    setattr(self, k, v)
+                self._set(k, v)
                     
     def update(self, config=None, **kwargs):
         self._update(kwargs)

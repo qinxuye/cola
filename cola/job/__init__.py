@@ -36,6 +36,7 @@ from cola.core.mq import MessageQueue, MpMessageQueueClient
 from cola.core.dedup import FileBloomFilterDeduper
 from cola.core.unit import Bundle, Url
 from cola.core.logs import get_logger
+from cola.core.utils import get_rpc_prefix
 from cola.settings import Settings
 from cola.functions.budget import BudgetApplyServer, ALLFINISHED
 from cola.functions.speed import SpeedControlServer
@@ -86,7 +87,7 @@ def run_containers(n_containers, n_instances, working_dir, job_def_path,
         if container_id < n_instances % n_containers:
             n_tasks += 1
         
-        if is_multi_process:
+        if not is_multi_process:
             mq_client = mq
         else:
             conn = mq.new_connection(container_id)
@@ -146,7 +147,14 @@ class Job(object):
         if not os.path.exists(self.working_dir):
             os.makedirs(self.working_dir)
         self.inited = False
-        self.is_shutdown = False
+        self._register_rpc()
+        
+    def _register_rpc(self):
+        if self.rpc_server:
+            self.prefix = get_rpc_prefix(app_name=self.job_name, 
+                                         prefix='job')
+            self.rpc_server.register_function(self.shutdown, name='shutdown',
+                                              prefix=self.prefix)
         
     def init_deduper(self):
         base = 1 if not self.is_bundle else 1000
@@ -246,15 +254,18 @@ class Job(object):
     def wait_for_stop(self):
         [process.join() for process in self.processes]
         
-    def shutdown(self):
+    def stop_running(self):
         if 'main' not in multiprocessing.current_process().name.lower():
             return
-            
+        
+        self.stopped.set()
+        self.wait_for_stop()
+        
+    def clear_running(self):
+        if 'main' not in multiprocessing.current_process().name.lower():
+            return
+        
         try:
-            self.stopped.set()
-            
-            self.wait_for_stop()
-            
             # output counters
             if self.ctx.is_local_mode:
                 self.logger.debug('Counters during running:')
@@ -271,7 +282,13 @@ class Job(object):
         finally:
             if os.path.exists(self.lock_file):
                 os.remove(self.lock_file)
-            
+
+    def shutdown(self):
+        try:
+            self.stop_running()
+        finally:
+            self.clear_running()
+                    
     def get_status(self):
         if self.ctx.is_local_mode and self.status == RUNNING and \
             self.budget_server.get_status() == ALLFINISHED:

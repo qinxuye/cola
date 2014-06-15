@@ -110,6 +110,8 @@ class Context(object):
                                       'master_ip': self.master_ip})
         self.logger = get_logger('context')
         
+        self.rpc_server = None
+        
     def _get_name_and_dir(self, working_dir, job_name, 
                           overwrite=False, clear=False):
         if clear:

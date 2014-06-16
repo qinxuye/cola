@@ -303,3 +303,11 @@ class Job(object):
         
     def resume(self):
         self.nonsuspend.set()
+        
+    def add_node(self, node):
+        if hasattr(self, 'mq'):
+            self.mq.add_node(node)
+            
+    def remove_node(self, node):
+        if hasattr(self, 'mq'):
+            self.mq.remove_node(node)

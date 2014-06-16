@@ -25,6 +25,7 @@ import threading
 import shutil
 
 from cola.core.utils import import_job_desc, Clock
+from cola.core.rpc import FileTransportServer
 from cola.job import Job
 
 class WorkerJobInfo(object):
@@ -40,12 +41,14 @@ class Worker(object):
     def __init__(self, ctx):
         self.ctx = ctx
         self.working_dir = os.path.join(self.ctx.working_dir, 'worker')
-        self.job_dir = os.path.join(self.ctx.working_dir, 'jobs')
-        self.zip_dir = os.path.join(self.ctx.working_dir, 'zip')
+        self.job_dir = os.path.join(self.working_dir, 'jobs')
+        self.zip_dir = os.path.join(self.working_dir, 'zip')
         self.running_jobs = {}
         
         self.rpc_server = self.ctx.rpc_server
         assert self.rpc_server is not None
+        
+        FileTransportServer(self.rpc_server, self.zip_dir)
         
     def _register_rpc(self):
         if self.rpc_server:
@@ -55,23 +58,8 @@ class Worker(object):
                                               'stop_job')
             self.rpc_server.register_function(self.clear_running_job,
                                               'clear_job')
-            
-    def _get_name_and_dir(self, job_name, overwrite=False, clear=False):
-        src_job_name = job_name
-        src_working_dir = working_dir \
-            = os.path.join(self.working_dir, job_name)
-        idx = 1
-        while os.path.exists(working_dir):
-            if clear:
-                shutil.rmtree(working_dir)
-            if overwrite:
-                job_name = '%s%s' % (src_job_name, idx)
-                working_dir = os.path.join(self.working_dir, job_name)
-                idx += 1
-                
-        if clear or not overwrite:
-            return src_job_name, src_working_dir
-        return job_name, working_dir  
+            self.rpc_server.register_function(self.add_node, 'add_node')
+            self.rpc_server.register_function(self.remove_node, 'remove_node')
         
     def prepare(self, job_name, overwrite=False, settings=None):
         src_job_name = job_name
@@ -85,8 +73,8 @@ class Worker(object):
             job_desc.update(settings)
         
         clear = job_desc.settings.job.clear
-        job_name, working_dir = self._get_name_and_dir(
-            job_name, overwrite=overwrite, clear=clear)
+        job_name, working_dir = self.ctx._get_name_and_dir(
+            self.working_dir, job_name, overwrite=overwrite, clear=clear)
         
         job = Job(self, job_path, job_name=job_name, job_desc=job_desc,
                   working_dir=working_dir, rpc_server=self.rpc_server,
@@ -120,3 +108,11 @@ class Worker(object):
             job_info.job.clear_running()
             job_info.thread.join()
             return job_info.clock.clock()
+        
+    def add_node(self, worker):
+        for job_info in self.running_jobs.values():
+            job_info.job.add_node(worker)
+            
+    def remove_node(self, worker):
+        for job_info in self.running_jobs.values():
+            job_info.job.remove_node(worker)

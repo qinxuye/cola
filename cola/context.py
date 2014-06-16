@@ -114,22 +114,22 @@ class Context(object):
         
     def _get_name_and_dir(self, working_dir, job_name, 
                           overwrite=False, clear=False):
-        working_dir = os.path.join(working_dir, job_name)
-        if clear:
-            if os.path.exists(working_dir):
+        src_job_name = job_name
+        base_dir = working_dir
+        src_working_dir = working_dir \
+            = os.path.join(base_dir, job_name)
+        idx = 1
+        while os.path.exists(working_dir):
+            if clear:
                 shutil.rmtree(working_dir)
-                
-        if overwrite:
-            base_name = job_name
-            idx = 1
-            while os.path.exists(working_dir):
-                job_name = '%s%s' % (base_name, idx)
-                base_dir = os.path.dirname(working_dir)
+            if overwrite:
+                job_name = '%s%s' % (src_job_name, idx)
                 working_dir = os.path.join(base_dir, job_name)
                 idx += 1
                 
+        if clear or not overwrite:
+            return src_job_name, src_working_dir
         return job_name, working_dir
-
         
     def _run_local_job(self, job_path, overwrite=False, rpc_server=None):
         job_desc = import_job_desc(job_path)

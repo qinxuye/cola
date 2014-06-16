@@ -28,6 +28,7 @@ from cola.functions.counter import CounterServer
 from cola.functions.budget import BudgetApplyServer
 from cola.functions.speed import SpeedControlServer
 from cola.cluster.tracker import WorkerTracker, JobTracker
+from cola.core.rpc import FileTransportServer, client_call
 
 RUNNING, HANGUP, STOPPED = range(3)
 CONTINOUS_HEARTBEAT = 90
@@ -77,12 +78,18 @@ class JobMaster(object):
             return
         
         # rpc call the other workers to remove this worker
+        self.workers.remove(worker)
+        for node in self.workers:
+            client_call(node, 'remove_node', worker)
         
     def add_worker(self, worker):
         if worker in self.workers:
             return
         
         # rpc call the other workers to add this worker
+        for node in self.workers:
+            client_call(node, 'add_node', worker)
+        self.workers.append(worker)
         
     def has_worker(self, worker):
         return worker in self.workers
@@ -90,11 +97,19 @@ class JobMaster(object):
 class Master(object):
     def __init__(self, ctx):
         self.ctx = ctx
+        self.rpc_server = self.ctx.rpc_server
+        assert self.rpc_server is not None
+        
+        self.working_dir = os.path.join(self.ctx.working_dir, 'master')
+        self.zip_dir = os.path.join(self.working_dir, 'zip')
+        self.job_dir = os.path.join(self.working_dir, 'jobs')
         
         self.worker_tracker = WorkerTracker()
         self.job_tracker = JobTracker()
         
         self.stopped = threading.Event()
+        
+        FileTransportServer(self.rpc_server, self.zip_dir)
         
     def register_heartbeat(self, worker):
         self.worker_tracker.register_worker(worker)
@@ -126,6 +141,11 @@ class Master(object):
                         
                     for job in self.job_tracker.running_jobs:
                         self.job_tracker.add_worker(job, worker)
+                        
+    def _unzip(self, job_name):
+        zip_file = os.path.join(self.zip_dir, job_name)
+        if os.path.exists(zip_file):
+            pass
                         
     def run(self):
         self._t = threading.Thread(target=self._check)

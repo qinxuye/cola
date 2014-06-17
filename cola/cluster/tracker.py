@@ -53,6 +53,9 @@ class JobTracker(object):
     def register_job(self, job_name, job_master):
         self.running_jobs[job_name] = job_master
         
+    def get_job_master(self, job_name):
+        return self.running_jobs[job_name]
+        
     def remove_worker(self, job_name, worker):
         if job_name in self.running_jobs:
             self.running_jobs[job_name].remove_worker(worker)

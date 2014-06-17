@@ -38,7 +38,7 @@ class Stage(object):
         self.prefix = get_rpc_prefix(app_name, prefix)
         self.remote_func = self.prefix + func
         
-    def barrier(self, parallel=False, *args):
+    def barrier(self, parallel, *args):
         def _call(worker):
             client_call(worker, self.remote_func, *args)
         

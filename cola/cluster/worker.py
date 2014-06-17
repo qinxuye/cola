@@ -54,6 +54,7 @@ class Worker(object):
         if self.rpc_server:
             self.rpc_server.register_function(self.prepare, 'prepare')
             self.rpc_server.register_function(self.run_job, 'run_job')
+            self.rpc_server.register_function(self.has_job, 'has_job')
             self.rpc_server.register_function(self.stop_running_job, 
                                               'stop_job')
             self.rpc_server.register_function(self.clear_running_job,
@@ -108,6 +109,9 @@ class Worker(object):
             job_info.job.clear_running()
             job_info.thread.join()
             return job_info.clock.clock()
+    
+    def has_job(self, job_name):
+        return job_name in self.running_jobs
         
     def add_node(self, worker):
         for job_info in self.running_jobs.values():

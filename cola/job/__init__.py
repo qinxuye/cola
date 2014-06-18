@@ -180,7 +180,7 @@ class Job(object):
         kw = {'app_name': self.job_name, 'copies': copies, 
               'n_priorities': n_priorities, 'deduper': self.deduper}
         self.mq = MessageQueue(mq_dir, self.rpc_server, self.ctx.addr, 
-            self.ctx.addrs, **kw)
+            self.ctx.addrs[:], **kw)
         # register shutdown callback
         self.shutdown_callbacks.append(self.mq.shutdown)
         

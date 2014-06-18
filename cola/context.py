@@ -33,10 +33,13 @@ from cola.core.logs import get_logger
 from cola.core.mq import MessageQueue
 from cola.core.dedup import FileBloomFilterDeduper
 from cola.core.rpc import ThreadedColaRPCServer
+from cola.core.zip import ZipHandler
 from cola.functions.budget import BudgetApplyServer
 from cola.functions.speed import SpeedControlServer
 from cola.functions.counter import CounterServer
 from cola.job import Job, FINISHED
+from cola.cluster.master import Master
+from cola.cluster.worker import Worker
 
 conf_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'conf')
 main_conf = Config(os.path.join(conf_dir, 'main.yaml'))
@@ -56,6 +59,11 @@ def manager_init():
     signal.signal(signal.SIGINT, handler)
                 
 class Context(object):
+    fix_addr = lambda addr: addr if ':' in addr \
+                    else '%s:%s'%(addr, main_conf.worker.port)
+    fix_ip = lambda addr: addr if ':' not in addr \
+                    else addr.split(':', 1)[0]
+    
     def __init__(self, local_mode=False, is_master=False, master=None, 
                  is_client=False, working_dir=None, mkdirs=False, 
                  addr=None, addrs=None):
@@ -91,16 +99,12 @@ class Context(object):
                 port = main_conf.worker.port
             self.addr = '%s:%s' % (self.addr, port)
         self.ip = self.addr.split(':', 1)[0]
-            
-        fix_addr = lambda addr: addr if ':' in addr \
-                    else '%s:%s'%(addr, main_conf.worker.port)
-        fix_ip = lambda addr: addr if ':' not in addr \
-                    else addr.split(':', 1)[0]
+        
         self.addrs = addrs
         if self.addrs is None:
             self.addrs = [self.addr, ]
-        self.ips = [fix_ip(address) for address in self.addrs]
-        self.addrs = [fix_addr(address) for address in self.addrs]
+        self.ips = [self.fix_ip(address) for address in self.addrs]
+        self.addrs = [self.fix_addr(address) for address in self.addrs]
             
         self.manager = ContextManager()
         self.manager.start(manager_init)
@@ -180,3 +184,35 @@ class Context(object):
         if self.is_local_mode:
             self._run_local_job(job_path, overwrite=overwrite, 
                                 rpc_server=rpc_server)
+        else:
+            job_name = import_job_desc(job_path).uniq_name
+            
+            def create_zip(working_dir):
+                zip_dir = os.path.join(self.working_dir, 'zip')
+                filename = job_name + '.zip'
+                zip_file = os.path.join(zip_dir, filename)
+                
+                ZipHandler.compress(zip_file, job_path, type_filters=('pyc', ))
+                return job_name
+            
+            if hasattr(self, 'master'):
+                create_zip(os.path.join(self.working_dir, 'master'))
+                self.master.run_job(job_name, unzip=True)
+            elif hasattr(self, 'worker'):
+                create_zip(os.path.join(self.working_dir, 'worker'))
+                self.worker.prepare(job_name, unzip=True)
+                self.worker.run_job(job_name)
+            
+    def start_master(self):
+        if self.rpc_server is None:
+            self.rpc_server = ThreadedColaRPCServer((self.ip, main_conf.worker.port))
+        
+        self.master = Master(self)
+        self.master.run()
+        
+    def start_worker(self):
+        if self.rpc_server is None:
+            self.rpc_server = ThreadedColaRPCServer((self.ip, main_conf.worker.port))
+            
+        self.worker = Worker(self)
+        self.worker.run()

@@ -29,7 +29,8 @@ from cola.functions.budget import BudgetApplyServer, ALLFINISHED
 from cola.functions.speed import SpeedControlServer
 from cola.cluster.tracker import WorkerTracker, JobTracker
 from cola.cluster.stage import Stage
-from cola.core.rpc import FileTransportServer, client_call
+from cola.core.rpc import FileTransportServer, FileTransportClient, \
+                            client_call
 from cola.core.zip import ZipHandler
 from cola.core.utils import import_job_desc
 
@@ -41,7 +42,8 @@ JOB_CHECK_INTERVAL = 5
 
 class JobMaster(object):
     def __init__(self, ctx, job_name, job_desc):
-        self.working_dir = os.path.join(ctx.working_dir, 'master', 'tracker')
+        self.working_dir = os.path.join(ctx.working_dir, 'master', 
+                                        'tracker', job_name)
         if not os.path.exists(self.working_dir):
             os.makedirs(self.working_dir)
             
@@ -115,12 +117,16 @@ class Master(object):
         
         self.stopped = threading.Event()
         
+        self._register_rpc()
+        
         FileTransportServer(self.rpc_server, self.zip_dir)
         
     def _register_rpc(self):
         self.rpc_server.register_function(self.run_job, 'run_job')
         self.rpc_server.register_function(self.stop_job, 'stop_job')
         self.rpc_server.register_function(self.shutdown, 'shutdown')
+        self.rpc_server.register_function(self.register_heartbeat, 
+                                          'register_heartbeat')
         
     def register_heartbeat(self, worker):
         self.worker_tracker.register_worker(worker)
@@ -172,11 +178,9 @@ class Master(object):
                         
     def run(self):
         self._worker_t = threading.Thread(target=self._check_workers)
-        self._worker_t.setDaemon(True)
         self._worker_t.start()
         
         self._job_t = threading.Thread(target=self._check_jobs())
-        self._job_t.setDaemon(True)
         self._job_t.start()
         
     def run_job(self, job_name, unzip=False):
@@ -187,6 +191,10 @@ class Master(object):
         job_master = JobMaster(self.ctx, job_name, job_desc)
         job_master.init()
         self.job_tracker.register_job(job_name, job_master)
+        
+        zip_file = os.path.join(self.zip_dir, job_name)
+        for worker in self.ctx.workers:
+            FileTransportClient(worker, zip_file).send_file()
         
         stage = Stage(self.ctx.workers, self.rpc_server, 'prepare')
         stage.barrier(True, job_name)
@@ -199,9 +207,18 @@ class Master(object):
                       self.rpc_server, 'stop_job')
         stage.barrier(True, job_name)
         
+        stage = Stage(self.job_tracker.get_job_master(job_name).workers,
+                      self.rpc_server, 'clear_job')
+        stage.barrier(True, job_name)
+        
     def _stop_all_jobs(self):
         for job_name in self.job_tracker.running_jobs.keys():
             self.stop_job(job_name)
+            
+    def _shutdown_all_workers(self):
+        stage = Stage(self.worker_tracker.workers, self.rpc_server,
+                      'shutdown')
+        stage.barrier(True)
         
     def shutdown(self):
         if not hasattr(self, '_worker_t'):
@@ -210,5 +227,7 @@ class Master(object):
             return
         self.stopped.set()
         self._stop_all_jobs()
+        self._shutdown_all_workers()
+        
         self._worker_t.join()
         self._job_t.join()

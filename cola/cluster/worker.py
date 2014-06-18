@@ -22,11 +22,13 @@ Created on 2014-6-8
 
 import os
 import threading
-import shutil
 
 from cola.core.utils import import_job_desc, Clock
-from cola.core.rpc import FileTransportServer
+from cola.core.rpc import FileTransportServer, client_call
+from cola.core.zip import ZipHandler
 from cola.job import Job
+
+HEARTBEAT_INTERVAL = 20
 
 class WorkerJobInfo(object):
     def __init__(self, job_name, working_dir):
@@ -40,6 +42,7 @@ class WorkerJobInfo(object):
 class Worker(object):
     def __init__(self, ctx):
         self.ctx = ctx
+        self.master = self.ctx.master
         self.working_dir = os.path.join(self.ctx.working_dir, 'worker')
         self.job_dir = os.path.join(self.working_dir, 'jobs')
         self.zip_dir = os.path.join(self.working_dir, 'zip')
@@ -47,6 +50,8 @@ class Worker(object):
         
         self.rpc_server = self.ctx.rpc_server
         assert self.rpc_server is not None
+        
+        self.stopped = threading.Event()
         
         FileTransportServer(self.rpc_server, self.zip_dir)
         
@@ -61,8 +66,32 @@ class Worker(object):
                                               'clear_job')
             self.rpc_server.register_function(self.add_node, 'add_node')
             self.rpc_server.register_function(self.remove_node, 'remove_node')
+            
+    def run(self):
+        def _report():
+            while not self.stopped.is_set():
+                workers = client_call(self.master, 'register_heartbeat', 
+                                      self.ctx.addr)
+                for worker in workers:
+                    if worker not in self.ctx.addrs:
+                        self.ctx.addrs.append(worker)
+                        self.ctx.addrs.append(self.ctx.fix_ip(worker))
+                
+                self.stopped.wait(HEARTBEAT_INTERVAL)
         
-    def prepare(self, job_name, overwrite=False, settings=None):
+        self._t = threading.Thread(target=_report)
+        self._t.start()
+        
+    def _unzip(self, job_name):
+        zip_file = os.path.join(self.zip_dir, job_name)
+        if os.path.exists(zip_file):
+            ZipHandler.uncompress(zip_file, self.job_dir)
+        
+    def prepare(self, job_name, unzip=False, overwrite=False, 
+                settings=None):
+        if unzip:
+            self._unzip(job_name)
+        
         src_job_name = job_name
         job_path = os.path.join(self.job_dir, job_name)
         
@@ -120,3 +149,15 @@ class Worker(object):
     def remove_node(self, worker):
         for job_info in self.running_jobs.values():
             job_info.job.remove_node(worker)
+            
+    def shutdown(self, shutdown_jobs=False):
+        if not hasattr(self, '_t'):
+            return
+        
+        if shutdown_jobs:
+            for job_info in self.running_jobs.values():
+                job_info.job.shutdown()
+                job_info.thread.join()
+            
+        self.stopped.set()
+        self._t.join()

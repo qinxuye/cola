@@ -23,11 +23,13 @@ Created on 2014-6-14
 import time
 import threading
 
+RUNNING, HANGUP, STOPPED = range(3)
 class WorkerInfo(object):
     def __init__(self, worker):
         self.worker = worker
         self.continous_register = 1
         self.last_update = int(time.time())
+        self.status = RUNNING
         
     def update(self):
         self.continous_register += 1

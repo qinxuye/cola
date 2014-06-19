@@ -59,9 +59,9 @@ def manager_init():
     signal.signal(signal.SIGINT, handler)
                 
 class Context(object):
-    fix_addr = lambda addr: addr if ':' in addr \
+    fix_addr = lambda _, addr: addr if ':' in addr \
                     else '%s:%s'%(addr, main_conf.worker.port)
-    fix_ip = lambda addr: addr if ':' not in addr \
+    fix_ip = lambda _, addr: addr if ':' not in addr \
                     else addr.split(':', 1)[0]
     
     def __init__(self, local_mode=False, is_master=False, master=None, 
@@ -114,7 +114,8 @@ class Context(object):
                                       'master_ip': self.master_ip})
         self.logger = get_logger('context')
         
-        self.rpc_server = None
+        self.master_rpc_server = None
+        self.worker_rpc_server = None
         
     def _get_name_and_dir(self, working_dir, job_name, 
                           overwrite=False, clear=False):
@@ -204,15 +205,17 @@ class Context(object):
                 self.worker.run_job(job_name)
             
     def start_master(self):
-        if self.rpc_server is None:
-            self.rpc_server = ThreadedColaRPCServer((self.ip, main_conf.worker.port))
+        if self.master_rpc_server is None:
+            self.master_rpc_server = ThreadedColaRPCServer((self.ip, 
+                                                            main_conf.master.port))
         
         self.master = Master(self)
         self.master.run()
         
     def start_worker(self):
-        if self.rpc_server is None:
-            self.rpc_server = ThreadedColaRPCServer((self.ip, main_conf.worker.port))
+        if self.worker_rpc_server is None:
+            self.worker_rpc_server = ThreadedColaRPCServer((self.ip, 
+                                                            main_conf.worker.port))
             
         self.worker = Worker(self)
         self.worker.run()

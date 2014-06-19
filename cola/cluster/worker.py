@@ -48,7 +48,7 @@ class Worker(object):
         self.zip_dir = os.path.join(self.working_dir, 'zip')
         self.running_jobs = {}
         
-        self.rpc_server = self.ctx.rpc_server
+        self.rpc_server = self.ctx.worker_rpc_server
         assert self.rpc_server is not None
         
         self.stopped = threading.Event()
@@ -161,3 +161,5 @@ class Worker(object):
             
         self.stopped.set()
         self._t.join()
+        
+        self.rpc_server.shutdown()

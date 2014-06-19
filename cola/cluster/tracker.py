@@ -70,3 +70,11 @@ class JobTracker(object):
         if job_name in self.running_jobs:
             self.running_jobs[job_name].has_worker(worker)
         return False
+    
+    def remove_job(self, job_name):
+        if job_name not in self.running_jobs:
+            return
+        
+        job_master = self.running_jobs[job_name]
+        job_master.shutdown()
+        del self.running_jobs[job_name]

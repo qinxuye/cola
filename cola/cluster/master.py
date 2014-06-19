@@ -50,10 +50,11 @@ class JobMaster(object):
         self.job_name = job_name
         self.job_desc = job_desc
         self.settings = job_desc.settings
-        self.rpc_server = ctx.rpc_server
+        self.rpc_server = ctx.master_rpc_server
         
         self.stopped = threading.Event()
         
+        self.inited = False
         self.init()
         
         self.workers = ctx.addrs[:]
@@ -77,9 +78,14 @@ class JobMaster(object):
                                                app_name=self.job_name)
         
     def init(self):
+        if self.inited:
+            return
+        
         self._init_counter_server()
         self._init_budget_server()
         self._init_speed_server()
+        
+        self.inited = True
         
     def remove_worker(self, worker):
         if worker not in self.workers:
@@ -101,11 +107,21 @@ class JobMaster(object):
         
     def has_worker(self, worker):
         return worker in self.workers
+    
+    def shutdown(self):
+        if not self.inited:
+            return
+        
+        self.counter_server.shutdown()
+        self.budget_server.shutdown()
+        self.speed_server.shutdown()
+        
+        self.inited = False
 
 class Master(object):
     def __init__(self, ctx):
         self.ctx = ctx
-        self.rpc_server = self.ctx.rpc_server
+        self.rpc_server = self.ctx.master_rpc_server
         assert self.rpc_server is not None
         
         self.working_dir = os.path.join(self.ctx.working_dir, 'master')
@@ -169,6 +185,7 @@ class Master(object):
             for job_master in self.job_tracker.running_jobs.values():
                 if job_master.budget_server.get_status() == ALLFINISHED:
                     self.stop_job(job_master.job_name)
+                    self.job_tracker.remove_job(job_master.job_name)
             self.stopped.wait(JOB_CHECK_INTERVAL)
                         
     def _unzip(self, job_name):
@@ -180,11 +197,12 @@ class Master(object):
         self._worker_t = threading.Thread(target=self._check_workers)
         self._worker_t.start()
         
-        self._job_t = threading.Thread(target=self._check_jobs())
+        self._job_t = threading.Thread(target=self._check_jobs)
         self._job_t.start()
         
     def run_job(self, job_name, unzip=False):
-        self._unzip(job_name)
+        if unzip:
+            self._unzip(job_name)
         
         job_path = os.path.join(self.job_dir, job_name)
         job_desc = import_job_desc(job_path)
@@ -211,6 +229,9 @@ class Master(object):
                       self.rpc_server, 'clear_job')
         stage.barrier(True, job_name)
         
+    def has_running_jobs(self):
+        return len(self.job_tracker.running_jobs) > 0
+        
     def _stop_all_jobs(self):
         for job_name in self.job_tracker.running_jobs.keys():
             self.stop_job(job_name)
@@ -231,3 +252,5 @@ class Master(object):
         
         self._worker_t.join()
         self._job_t.join()
+        
+        self.rpc_server.shutdown()

@@ -165,8 +165,10 @@ class CounterClient(object):
     def sync(self):
         with self.lock:
             if isinstance(self.server, basestring):
-                client_call(self.server, 'inc_merge', self.inc_counter.container)
-                client_call(self.server, 'acc_merge', self.acc_counter.container)
+                client_call(self.server, self.prefix+'inc_merge', 
+                            self.inc_counter.container)
+                client_call(self.server, self.prefix+'acc_merge', 
+                            self.acc_counter.container)
             else:
                 self.server.inc_merge(self.inc_counter.container)
                 self.server.acc_merge(self.acc_counter.container)

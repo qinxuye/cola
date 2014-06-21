@@ -42,7 +42,8 @@ class ColaRPCServer(SocketServer.ThreadingMixIn, SimpleXMLRPCServer):
                 name = function.__name__
             prefix = prefix+'_' if not prefix.endswith('_') else prefix
             SimpleXMLRPCServer.register_function(self, function, name=prefix+name)
-        SimpleXMLRPCServer.register_function(self, function, name=name)
+        else:
+            SimpleXMLRPCServer.register_function(self, function, name=name)
         
 class ThreadedColaRPCServer(object):
     

@@ -66,7 +66,7 @@ class Context(object):
     
     def __init__(self, local_mode=False, is_master=False, master=None, 
                  is_client=False, working_dir=None, mkdirs=False, 
-                 addr=None, addrs=None):
+                 ip=None, ips=None):
         self.is_local_mode = local_mode
         self.is_master = is_master
         self.is_client = is_client
@@ -87,24 +87,17 @@ class Context(object):
             if mkdirs and not os.path.exists(self.working_dir):
                 os.makedirs(self.working_dir)
                 
-        self.addr = addr
-        if self.addr is None:
-            self.addr = get_ip()
-        if ':' not in self.addr:
-            if is_master:
-                port = main_conf.master.port
-            elif is_client:
-                port = main_conf.client.port
+        self.ip = ip
+        if self.ip is None:
+            if self.is_master:
+                self.ip = self.master_ip
             else:
-                port = main_conf.worker.port
-            self.addr = '%s:%s' % (self.addr, port)
-        self.ip = self.addr.split(':', 1)[0]
+                self.ip = get_ip()
+        self.master_addr = '%s:%s' % (self.ip, main_conf.master.port)
+        self.worker_addr = '%s:%s' % (self.ip, main_conf.worker.port)
         
-        self.addrs = addrs
-        if self.addrs is None:
-            self.addrs = [self.addr, ]
-        self.ips = [self.fix_ip(address) for address in self.addrs]
-        self.addrs = [self.fix_addr(address) for address in self.addrs]
+        self.ips = ips if ips is not None else []
+        self.addrs = [self.fix_addr(_ip) for _ip in self.ips]
             
         self.manager = ContextManager()
         self.manager.start(manager_init)
@@ -112,7 +105,7 @@ class Context(object):
                                       'root': self.working_dir,
                                       'is_local': self.is_local_mode, 
                                       'master_ip': self.master_ip})
-        self.logger = get_logger('context')
+        self.logger = get_logger('cola_context')
         
         self.master_rpc_server = None
         self.worker_rpc_server = None
@@ -209,13 +202,17 @@ class Context(object):
             self.master_rpc_server = ThreadedColaRPCServer((self.ip, 
                                                             main_conf.master.port))
         
-        self.master = Master(self)
-        self.master.run()
+        master = Master(self)
+        master.run()
+        
+        return master
         
     def start_worker(self):
         if self.worker_rpc_server is None:
             self.worker_rpc_server = ThreadedColaRPCServer((self.ip, 
                                                             main_conf.worker.port))
             
-        self.worker = Worker(self)
-        self.worker.run()
+        worker = Worker(self)
+        worker.run()
+        
+        return worker

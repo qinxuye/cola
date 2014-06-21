@@ -28,6 +28,7 @@ import multiprocessing.managers
 import threading
 import signal
 import pprint
+import socket
 
 from cola.core.errors import ConfigurationError
 from cola.core.utils import base58_encode, get_cpu_count, \
@@ -179,7 +180,7 @@ class Job(object):
         
         kw = {'app_name': self.job_name, 'copies': copies, 
               'n_priorities': n_priorities, 'deduper': self.deduper}
-        self.mq = MessageQueue(mq_dir, self.rpc_server, self.ctx.addr, 
+        self.mq = MessageQueue(mq_dir, self.rpc_server, self.ctx.worker_addr, 
             self.ctx.addrs[:], **kw)
         # register shutdown callback
         self.shutdown_callbacks.append(self.mq.shutdown)
@@ -224,7 +225,7 @@ class Job(object):
             self.budget_arg = self.budget_server
             self.speed_arg = self.speed_server
         else:
-            self.counter_args, self.budget_args, self.speed_args = \
+            self.counter_arg, self.budget_arg, self.speed_arg = \
                 tuple([self.ctx.master for _ in range(3)]) 
         
     def init(self):
@@ -279,7 +280,10 @@ class Job(object):
             for cb in self.shutdown_callbacks:
                 cb()
             if hasattr(self, 'manager'):
-                self.manager.shutdown()
+                try:
+                    self.manager.shutdown()
+                except socket.error:
+                    pass
             self.status = FINISHED
             self.logger.debug('Shutdown finished')
         finally:
@@ -287,6 +291,9 @@ class Job(object):
                 os.remove(self.lock_file)
 
     def shutdown(self):
+        if 'main' not in multiprocessing.current_process().name.lower():
+            return
+        
         try:
             self.stop_running()
         finally:

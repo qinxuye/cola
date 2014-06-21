@@ -38,7 +38,7 @@ class Opener(object):
             gz.close()
 
 class BuiltinOpener(Opener):
-    def __init__(self, cookie_filename=None):
+    def __init__(self, cookie_filename=None, **kwargs):
         self.cj = cookielib.LWPCookieJar()
         if cookie_filename is not None:
             self.cj.load(cookie_filename)

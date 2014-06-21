@@ -30,10 +30,8 @@ class Stage(object):
     Used for master to control the workers and will not move to the next stage
     until this one has been finished
     '''
-    def __init__(self, workers, rpc_server, func, 
-                 prefix=None, app_name=None):
+    def __init__(self, workers, func, prefix=None, app_name=None):
         self.workers = workers
-        self.rpc_server = rpc_server
         self.func = func
         self.prefix = get_rpc_prefix(app_name, prefix)
         self.remote_func = self.prefix + func

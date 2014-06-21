@@ -281,7 +281,7 @@ class SpeedControlClient(object):
         
     def require(self, size=1):
         if isinstance(self.server, basestring):
-            return client_call(self.server, 'require', self.addr, 
+            return client_call(self.server, self.prefix+'require', self.addr, 
                                self.instance_id, size)
         else:
             return self.server.require(self.addr, self.instance_id, 

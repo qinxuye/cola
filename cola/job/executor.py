@@ -40,6 +40,8 @@ DEFAULT_ERROR_RETRY_TIMES = 15
 DEFAULT_ERROR_IGNORE = False
 DEFAULT_SPEEED_REQUIRE_SIZE = 5
 
+DEFAULT_OPENER_TIMEOUT = 20
+
 class UnitRetryFailed(Exception): pass
 
 class ExecutorCounter(object):
@@ -59,7 +61,8 @@ class Executor(object):
                  is_local=False, env=None, logger=None):
         self.id_ = id_
         self.job_desc = job_desc
-        self.opener = job_desc.opener_cls()
+        self.opener = job_desc.opener_cls(
+            timeout=DEFAULT_OPENER_TIMEOUT)
         self.mq = mq
         self.dir_ = working_dir
         self.settings = job_desc.settings
@@ -131,7 +134,7 @@ class Executor(object):
         return True
     
     def clear_and_relogin(self):
-        self.opener = self.job_desc.opener_cls()
+        self.opener = self.job_desc.opener_cls(timeout=DEFAULT_OPENER_TIMEOUT)
         self.login(random=True)
         
     def _pack_error(self, url, msg, error, content=None,

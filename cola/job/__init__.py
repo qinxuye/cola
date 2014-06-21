@@ -80,9 +80,10 @@ def run_containers(n_containers, n_instances, working_dir, job_def_path,
                    job_name, env, mq,
                    counter_server, budget_server, speed_server,
                    stopped, nonsuspend,
-                   block=False, is_multi_process=False):
+                   block=False, is_multi_process=False,
+                   offset=0):
     processes = []
-    acc = 0
+    acc = offset * n_instances
     for container_id in range(n_containers):
         n_tasks = n_instances / n_containers
         if container_id < n_instances % n_containers:
@@ -117,7 +118,7 @@ def run_containers(n_containers, n_instances, working_dir, job_def_path,
 class Job(object):
     def __init__(self, ctx, job_def_path, job_name=None, 
                  job_desc=None, working_dir=None, rpc_server=None,
-                 manager=None):
+                 manager=None, job_offset=0):
         self.status = NOTSTARTED
         self.ctx = ctx
         self.shutdown_callbacks = []
@@ -140,6 +141,7 @@ class Job(object):
         
         self.n_instances = self.job_desc.settings.job.instances
         self.n_containers = min(get_cpu_count(), max(self.n_instances, 1))
+        self.job_offset = job_offset
         self.is_multi_process = self.n_containers > 1
         self.processes = []
             
@@ -251,7 +253,8 @@ class Job(object):
             self.n_containers, self.n_instances, self.working_dir, 
             self.job_def_path, self.job_name, self.ctx.env, self.mq,
             self.counter_arg, self.budget_arg, self.speed_arg, 
-            self.stopped, self.nonsuspend, is_multi_process=self.is_multi_process)
+            self.stopped, self.nonsuspend, is_multi_process=self.is_multi_process,
+            offset=self.job_offset)
         if block:
             self.wait_for_stop()
             

@@ -83,12 +83,9 @@ class Worker(object):
             while not self.stopped.is_set():
                 workers = client_call(self.master, 'register_heartbeat', 
                                       self.ctx.worker_addr)
-                for worker in workers:
-                    addr = self.ctx.fix_addr(worker)
-                    if worker not in self.ctx.addrs:
-                        self.ctx.addrs.append(addr)
-                        self.ctx.ips.append(self.ctx.fix_ip(worker))
-                
+                self.ctx.addrs = [self.ctx.fix_addr(worker) for worker in workers]
+                self.ctx.ips = [self.ctx.fix_ip(worker) for worker in workers]
+                                
                 self.stopped.wait(HEARTBEAT_INTERVAL)
         
         self._t = threading.Thread(target=_report)
@@ -115,13 +112,14 @@ class Worker(object):
         if settings is not None:
             job_desc.update(settings)
         
+        job_id = self.ctx.ips.index(self.ctx.ip)
         clear = job_desc.settings.job.clear
         job_name, working_dir = self.ctx._get_name_and_dir(
             self.working_dir, job_name, overwrite=overwrite, clear=clear)
         
         job = Job(self.ctx, job_path, job_name=job_name, job_desc=job_desc,
                   working_dir=working_dir, rpc_server=self.rpc_server,
-                  manager=self.ctx.manager)
+                  manager=self.ctx.manager, job_offset=job_id)
         t = threading.Thread(target=job.run, args=(True, ))
         
         job_info = WorkerJobInfo(job_name, working_dir)

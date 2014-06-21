@@ -24,7 +24,6 @@ import os
 import shutil
 import errno
 import time
-import sys
 
 import yaml
 

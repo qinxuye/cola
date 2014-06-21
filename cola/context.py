@@ -97,6 +97,8 @@ class Context(object):
         self.worker_addr = '%s:%s' % (self.ip, main_conf.worker.port)
         
         self.ips = ips if ips is not None else []
+        if not self.ips:
+            self.ips.append(self.ip)
         self.addrs = [self.fix_addr(_ip) for _ip in self.ips]
             
         self.manager = ContextManager()

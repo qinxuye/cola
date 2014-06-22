@@ -100,7 +100,9 @@ class Task(object):
         if self.task_id < len(self.job_desc.starts):
             start = self.job_desc.starts[self.task_id]
             if not self.mq.exist(start):
-                self.priorities_objs[0].append(self.job_desc.unit_cls(start))
+                if not isinstance(start, self.job_desc.unit_cls):
+                    start = self.job_desc.unit_cls(start)
+                self.priorities_objs[0].append(start)
         
     def _get_unit(self, priority, runnings):
         if len(self.priorities_objs[priority]) > 0:
@@ -110,7 +112,7 @@ class Task(object):
             if not is_inc:
                 running = self.mq.get(priority=priority)
             else:
-                running = self.mq.get_inc(priority=priority)
+                running = self.mq.get_inc()
             if running:
                 if isinstance(running, str):
                     running = self.job_desc.unit_cls(running)

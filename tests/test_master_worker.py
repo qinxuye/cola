@@ -77,7 +77,7 @@ class Test(unittest.TestCase):
     def tearDown(self):
         try:
             shutil.rmtree(self.working_dir)
-        except IOError:
+        except:
             pass
 
     def testMasterWorker(self):

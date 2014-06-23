@@ -75,7 +75,10 @@ class Test(unittest.TestCase):
             yaml.dump(yaml_obj, f)
 
     def tearDown(self):
-        shutil.rmtree(self.working_dir)
+        try:
+            shutil.rmtree(self.working_dir)
+        except IOError:
+            pass
 
     def testMasterWorker(self):
         ctx = Context(is_master=True, master='127.0.0.1', 

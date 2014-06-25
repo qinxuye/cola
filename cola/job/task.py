@@ -63,7 +63,7 @@ class Task(object):
                                 self.n_priorities+1
         self.priorities_secs = tuple(
             [MAX_RUNNING_SECONDS/(2**i) for i in range(self.full_priorities)])
-        self.priorities_objs = [[]] * self.full_priorities
+        self.priorities_objs = [[] for _ in range(self.full_priorities)]
         
         self.is_bundle = self.settings.job.mode == 'bundle'
         self.budgets = 0
@@ -97,8 +97,14 @@ class Task(object):
             os.makedirs(self.dir_)
         
         self.executor.login()
-        if self.task_id < len(self.job_desc.starts):
-            start = self.job_desc.starts[self.task_id]
+        starts = []
+        if self.is_local and \
+            self.job_desc.settings.job.instances == 1:
+            starts = self.job_desc.starts
+        else:
+            if self.task_id < len(self.job_desc.starts):
+                starts.append(self.job_desc.starts[self.task_id])
+        for start in starts:
             if not self.mq.exist(start):
                 if not isinstance(start, self.job_desc.unit_cls):
                     start = self.job_desc.unit_cls(start)

@@ -389,7 +389,7 @@ class BundleExecutor(Executor):
         try:
             self._log_error(bundle, url, e)
             retries, span, ignore = self._get_handle_error_params(e)
-            if bundle.error_times <= retries:
+            if retries < 0 or bundle.error_times <= retries:
                 bundle.current_urls.insert(0, url)
                 self.stopped.wait(span)
                 return
@@ -448,7 +448,7 @@ class BundleExecutor(Executor):
         except Exception, e:
             self._handle_error(bundle, url, e)
             
-        return [], []
+        return [url, ], []
         
     def execute(self, bundle, max_sec):
         failed = False

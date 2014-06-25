@@ -204,7 +204,7 @@ class Store(object):
     
     def put_one(self, obj, force=False, commit=True):
         if self.stopped: return
-        self.init()
+#         self.init()
         
         if isinstance(obj, str) and obj.strip() == '':
             return

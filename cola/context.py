@@ -126,6 +126,8 @@ class Context(object):
                 job_name = '%s%s' % (src_job_name, idx)
                 working_dir = os.path.join(base_dir, job_name)
                 idx += 1
+            if not clear and not overwrite:
+                break
                 
         if clear or not overwrite:
             return src_job_name, src_working_dir

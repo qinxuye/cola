@@ -160,6 +160,9 @@ class Task(object):
                         if len(runnings) == 0:
                             break
                         if self.is_bundle:
+                            priority_name = 'inc' if curr_priority == self.n_priorities else curr_priority
+                            self.logger.debug(
+                                'process bundle from priority %s' % priority_name)
                             rest = min(last - clock.clock(), MAX_BUNDLE_RUNNING_SECONDS)
                             obj = self.executor.execute(runnings.pop(), rest)
                         else:

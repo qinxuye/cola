@@ -180,3 +180,7 @@ def pickle_connection(connection):
 def unpickle_connection(pickled_connection):
     (func, args) = pickle.loads(pickled_connection)
     return func(*args)
+
+def import_module(module_name):
+    root, module = module_name.rsplit('.', 1)
+    return getattr(__import__(root, fromlist=['']), module)

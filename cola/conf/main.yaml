@@ -31,3 +31,6 @@ job:
       retries: 5
       span: 10
       ignore: no
+  components:
+    deduper:
+      cls: cola.core.dedup.FileBloomFilterDeduper

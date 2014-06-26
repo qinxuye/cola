@@ -33,6 +33,10 @@ Modified from part of python-hashes by sangelone.
 import math
 import hashlib
 import os
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 from cola.core.bloomfilter.hashtype import HashType
 
@@ -109,35 +113,29 @@ class BloomFilter(HashType):
 class BloomFilterFileDamage(Exception): pass
 
 class FileBloomFilter(BloomFilter):
-    def __init__(self, filename, capacity):
+    def __init__(self, filename, capacity, false_positive_rate=0.01):
         if os.path.exists(filename) and os.path.getsize(filename) > 0:
-            f = open(filename)
-            try:
-                lines = f.readlines()
-                if len(lines) != 2:
-                    raise BloomFilterFileDamage('Bloom filter file has been damaged.')
-                
-                old_capacity, hash_ = tuple(lines)
-                try:
-                    old_capacity = int(old_capacity)
-                    hash_ = long(hash_)
-                except ValueError:
-                    raise BloomFilterFileDamage('Bloom filter file must have right hash value.')
-                
-                if capacity > old_capacity:
-                    super(FileBloomFilter, self).__init__(capacity=capacity)
+            with open(filename) as f:
+                old_capcity, old_false_rate, hash_ = pickle.load(f)
+                    
+                if capacity > old_capcity or \
+                    false_positive_rate < old_false_rate:
                     del hash_
-                    self.capacity = capacity
+                    self.capacity, self.false_positive_rate = \
+                        capacity, false_positive_rate
+                    super(FileBloomFilter, self).__init__(
+                        capacity=capacity,
+                        false_positive_rate=false_positive_rate)
                 else:
-                    super(FileBloomFilter, self).__init__(capacity=old_capacity)
-                    self.hash = hash_
-                    self.capacity = old_capacity
-            finally:
-                f.close()
+                    self.capacity = old_capcity
+                    self.false_positive_rate = old_false_rate
         else:
-            super(FileBloomFilter, self).__init__(capacity=capacity)
             self.capacity = capacity
-        
+            self.false_positive_rate = false_positive_rate
+            super(FileBloomFilter, self).__init__(
+                capacity=capacity, 
+                false_positive_rate=false_positive_rate)
+                
         self.f = open(filename, 'w+')
         
     def verify(self, item):
@@ -147,11 +145,8 @@ class FileBloomFilter(BloomFilter):
         return exists
     
     def sync(self):
-        self.f.seek(0)
-        self.f.writelines([
-            str(self.capacity) + '\n',
-            str(self.hash)
-        ])
+        pickle.dump((self.capacity, self.false_positive_rate, self.hash), 
+                    self.f)
     
     def close(self):
         self.f.close()

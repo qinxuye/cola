@@ -37,7 +37,7 @@ from cola.core.mq import MessageQueue, MpMessageQueueClient
 from cola.core.dedup import FileBloomFilterDeduper
 from cola.core.unit import Bundle, Url
 from cola.core.logs import get_logger
-from cola.core.utils import get_rpc_prefix
+from cola.core.utils import get_rpc_prefix, import_module
 from cola.settings import Settings
 from cola.functions.budget import BudgetApplyServer, ALLFINISHED
 from cola.functions.speed import SpeedControlServer
@@ -163,15 +163,20 @@ class Job(object):
                                                   name='get_jobs')
         
     def init_deduper(self):
+        deduper_cls = import_module(self.settings.job.components.deduper.cls)
+        
         base = 1 if not self.is_bundle else 1000
         size = self.job_desc.settings.job.size
         capacity = UNLIMIT_BLOOM_FILTER_CAPACITY
         if size > 0:
             capacity = max(base * size * 10, capacity)
-        deduper_path = os.path.join(self.working_dir, 'dedup')
-        deduper_cls = FileBloomFilterDeduper if not self.is_multi_process \
-                        else self.manager.deduper
-        self.deduper = deduper_cls(deduper_path, capacity)
+            
+        params = dict(self.settings.job.components.deduper)
+        del params['cls']
+        
+        deduper_cls = deduper_cls if not self.is_multi_process \
+                        else getattr(self.manager, deduper_cls.__name__)
+        self.deduper = deduper_cls(self.working_dir, capacity, **params)
         # register shutdown callback
         self.shutdown_callbacks.append(self.deduper.shutdown)
         

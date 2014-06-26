@@ -31,7 +31,7 @@ from cola.core.config import Config
 from cola.core.utils import get_ip, import_job_desc, Clock
 from cola.core.logs import get_logger
 from cola.core.mq import MessageQueue
-from cola.core.dedup import FileBloomFilterDeduper
+from cola.core.dedup import FileBloomFilterDeduper, MapDeduper
 from cola.core.rpc import ThreadedColaRPCServer
 from cola.core.zip import ZipHandler
 from cola.functions.budget import BudgetApplyServer
@@ -46,7 +46,9 @@ main_conf = Config(os.path.join(conf_dir, 'main.yaml'))
 
 class ContextManager(multiprocessing.managers.SyncManager):
     pass
-ContextManager.register('deduper', FileBloomFilterDeduper)
+
+ContextManager.register('FileBloomFilterDeduper', FileBloomFilterDeduper)
+ContextManager.register('MapDeduper', MapDeduper)
 ContextManager.register('mq', MessageQueue)
 ContextManager.register('budget_server', BudgetApplyServer)
 ContextManager.register('speed_server', SpeedControlServer)

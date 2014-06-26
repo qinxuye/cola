@@ -94,8 +94,7 @@ class Executor(object):
     def login(self, random=False):
         if self.is_local:
             if not self._login(shuffle=random):
-                self.save()
-                raise
+                raise LoginFailure('login failed')
         else:
             while not self.stopped.is_set():
                 if self._login(shuffle=random):
@@ -122,7 +121,7 @@ class Executor(object):
                     not login_result[0]:
                     if self.logger:
                         self.logger.error('instance %s, login fail, reason: %s' % \
-                                          (self.task_id, login_result[1]))
+                                          (self.id_, login_result[1]))
                     continue
                 elif not login_result:
                     if self.logger:

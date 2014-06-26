@@ -82,7 +82,10 @@ class MapDeduper(Deduper):
         self.is_shutdown = False
         
     def exist(self, key):
-        return key in self.container
+        result = key in self.container
+        if not result:
+            self.container[key] = True
+        return result
     
     def shutdown(self):
         if self.is_shutdown is True:

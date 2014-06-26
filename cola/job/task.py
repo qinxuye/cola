@@ -164,6 +164,8 @@ class Task(object):
                             self.logger.debug(
                                 'process bundle from priority %s' % priority_name)
                             rest = min(last - clock.clock(), MAX_BUNDLE_RUNNING_SECONDS)
+                            if rest <= 0:
+                                break
                             obj = self.executor.execute(runnings.pop(), rest)
                         else:
                             obj = self.executor.execute(runnings.pop())

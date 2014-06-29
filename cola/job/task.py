@@ -98,12 +98,11 @@ class Task(object):
         
         self.executor.login()
         starts = []
-        if self.is_local and \
-            self.job_desc.settings.job.instances == 1:
-            starts = self.job_desc.starts
-        else:
-            if self.task_id < len(self.job_desc.starts):
-                starts.append(self.job_desc.starts[self.task_id])
+        i = self.task_id
+        while i < len(self.job_desc.starts):
+            starts.append(self.job_desc.starts[i])
+            i += self.settings.job.instances
+
         for start in starts:
             if not self.mq.exist(start):
                 if not isinstance(start, self.job_desc.unit_cls):

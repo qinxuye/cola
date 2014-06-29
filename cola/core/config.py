@@ -50,7 +50,7 @@ class PropertyObject(dict):
         else:
             self[k] = v
         
-        setattr(self, k, v)
+        setattr(self, k, self[k])
         
     def _update(self, d):
         for k, v in d.iteritems():

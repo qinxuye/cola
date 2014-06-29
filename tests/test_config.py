@@ -42,6 +42,10 @@ class Test(unittest.TestCase):
         assert isinstance(self.obj.list, list)
         assert self.obj.list[0].count == 1
         
+        self.obj.update(**{'list': [{'count': 3}, ]})
+        assert self.obj.name == 'cola'
+        assert self.obj.list[2].count == 3
+        
     def testPickle(self):
         c = pickle.dumps(main_conf)
         new_conf = pickle.loads(c)

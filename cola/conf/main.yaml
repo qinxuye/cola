@@ -31,6 +31,10 @@ job:
       retries: 5
       span: 10
       ignore: no
+  banned_handlers:
+    - action: relogin
+    - action: proxy
+    - action: clear_proxy
   components:
     deduper:
       cls: cola.core.dedup.FileBloomFilterDeduper

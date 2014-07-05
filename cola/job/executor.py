@@ -82,11 +82,62 @@ class Executor(object):
             
         self.logger = logger
         
+        self._configure_proxy()
+        
         # used for tracking if banned
         self.is_normal = True
         self.normal_start = time.time()
         self.normal_pages = 0
         self.banned_start = None
+        
+        self.banned_handler_idx = -1
+        self._configure_banned_handler()
+        self.banned_handler_size = len(self.banned_handlers)
+        
+    def _configure_proxy(self):
+        if not hasattr(self.opener, 'add_proxy'):
+            return
+        
+        if self.settings.job.proxies:
+            proxies = self.settings.job.proxies
+            try:
+                for p in proxies:
+                    proxy_type = p.type or 'all'
+                    if p.addr:
+                        self.opener.add_proxy(p.addr, 
+                                              proxy_type=proxy_type,
+                                              user=p.user,
+                                              password=p.password)
+            except TypeError:
+                return
+            
+    def _configure_banned_handler(self):
+        if self.settings.job.banned_handlers:
+            handlers = self.settings.job.banned_handlers
+            self.banned_handlers = []
+            try:
+                for h in handlers:
+                    if not h.action:
+                        return
+                    
+                    if h.action == 'relogin':
+                        self.banned_handlers.append(self.clear_and_relogin)
+                    elif h.action == 'proxy':
+                        if not h.addr or not hasattr(self.opener, 'add_proxy'):
+                            continue
+                        proxy_type = h.type or 'all'
+                        def proxy_handler():
+                            self.opener.add_proxy(h.addr, 
+                                                  proxy_type=proxy_type,
+                                                  user=h.user,
+                                                  password=h.password)
+                        self.banned_handlers.append(proxy_handler)
+                    elif h.action == 'clear_proxy':
+                        if hasattr(self.opener, 'remove_proxy'):
+                            self.banned_handlers.append(self.opener.remove_proxy)
+                        
+            except TypeError:
+                return
         
     def execute(self):
         raise NotImplementedError
@@ -179,8 +230,9 @@ class Executor(object):
         return retries, span, ignore
     
     def _handle_fetch_banned(self):
-        self.clear_and_relogin()
-        # http proxies
+        self.banned_handler_idx += 1
+        index = self.banned_handler_idx % self.banned_handler_size
+        self.banned_handlers[index]()
         
     def _finish(self, unit):
         if self.logger:
@@ -205,7 +257,7 @@ class Executor(object):
                   'normal_end': curr,
                   'normal_pages': self.normal_pages}
             self.banned_start = curr
-            self.counter_client.multi_local_acc(self.ip, self.id_, **kw)
+            self.counter_client.multi_local_acc(self.ip, self.id_, **kw) 
             
     def _recover_normal(self):
         if not self.is_normal:

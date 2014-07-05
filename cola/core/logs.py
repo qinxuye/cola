@@ -36,8 +36,10 @@ class Log(object):
         self.formatter = logging.Formatter(
             '%(asctime)s - %(module)s.%(funcName)s.%(lineno)d - %(levelname)s - %(message)s')
         
-    def add_stream_log(self, level=logging.DEBUG):
+    def add_stream_log(self, level=logging.DEBUG, format_=False):
         stream_handler = logging.StreamHandler()
+        if format_:
+            stream_handler.setFormatter(self.formatter)
         stream_handler.setLevel(level)
         self.logger.addHandler(stream_handler)
         

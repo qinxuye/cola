@@ -64,6 +64,9 @@ class PropertyObject(dict):
                 self._update(config)
             else:
                 self._update(config.conf)
+    
+    def has(self, k):
+        return hasattr(self, k)
 
 class Config(object):
     def __init__(self, yaml_file):

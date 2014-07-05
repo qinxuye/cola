@@ -98,7 +98,7 @@ class Executor(object):
         if not hasattr(self.opener, 'add_proxy'):
             return
         
-        if self.settings.job.proxies:
+        if self.settings.job.has('proxies'):
             proxies = self.settings.job.proxies
             try:
                 for p in proxies:
@@ -112,18 +112,18 @@ class Executor(object):
                 return
             
     def _configure_banned_handler(self):
-        if self.settings.job.banned_handlers:
+        if self.settings.job.has('banned_handlers'):
             handlers = self.settings.job.banned_handlers
             self.banned_handlers = []
             try:
                 for h in handlers:
-                    if not h.action:
+                    if not h.has('action'):
                         return
                     
                     if h.action == 'relogin':
                         self.banned_handlers.append(self.clear_and_relogin)
                     elif h.action == 'proxy':
-                        if not h.addr or not hasattr(self.opener, 'add_proxy'):
+                        if not h.has('addr') or not hasattr(self.opener, 'add_proxy'):
                             continue
                         proxy_type = h.type or 'all'
                         def proxy_handler():

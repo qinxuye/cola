@@ -55,7 +55,7 @@ class Worker(object):
         
         self.stopped = threading.Event()
         
-        self.logger = get_logger('cola_worker')
+        self.logger = get_logger('cola_worker', server=self.ctx.master_ip)
         
         self._ensure_exists(self.job_dir)
         self._ensure_exists(self.zip_dir)

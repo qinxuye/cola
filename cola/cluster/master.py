@@ -23,6 +23,10 @@ Created on 2014-6-12
 import os
 import time
 import threading
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 
 from cola.functions.counter import CounterServer
 from cola.functions.budget import BudgetApplyServer, ALLFINISHED
@@ -33,13 +37,14 @@ from cola.core.rpc import FileTransportServer, FileTransportClient, \
                             client_call
 from cola.core.zip import ZipHandler
 from cola.core.utils import import_job_desc
-from cola.core.logs import get_logger
+from cola.core.logs import get_logger, LogRecordSocketReceiver
 
 RUNNING, HANGUP, STOPPED = range(3)
 CONTINOUS_HEARTBEAT = 90
 HEARTBEAT_INTERVAL = 20
 HEARTBEAT_CHECK_INTERVAL = 3*HEARTBEAT_INTERVAL
 JOB_CHECK_INTERVAL = 5
+JOB_META_STATUS_FILENAME = 'job.meta.status'
 
 class JobMaster(object):
     def __init__(self, ctx, job_name, job_desc, workers):
@@ -85,7 +90,7 @@ class JobMaster(object):
         self._init_speed_server()
         
         self.inited = True
-        
+                
     def remove_worker(self, worker):
         if worker not in self.workers:
             return
@@ -133,10 +138,28 @@ class Master(object):
         self.stopped = threading.Event()
         
         self.logger = get_logger("cola_master")
+        self._init_log_server(self.logger)
         
         self._register_rpc()
-        
+        self.load()
         FileTransportServer(self.rpc_server, self.zip_dir)
+        
+    def load(self):
+        self.runned_job_metas = {}
+        
+        job_meta_file = os.path.join(self.working_dir, JOB_META_STATUS_FILENAME)
+        if os.path.exists(job_meta_file) and \
+            os.path.getsize(job_meta_file) > 0:
+            try:
+                with open(job_meta_file) as f:
+                    self.runned_job_metas = pickle.load(f)
+            except:
+                pass
+    
+    def save(self):
+        job_meta_file = os.path.join(self.working_dir, JOB_META_STATUS_FILENAME)
+        with open(job_meta_file, 'w') as f:
+            pickle.dump(self.runned_job_metas, f)
         
     def _register_rpc(self):
         self.rpc_server.register_function(self.run_job, 'run_job')
@@ -148,6 +171,17 @@ class Master(object):
     def register_heartbeat(self, worker):
         self.worker_tracker.register_worker(worker)
         return self.worker_tracker.workers.keys()
+    
+    def _init_log_server(self, logger):
+        self.log_server = LogRecordSocketReceiver(host=self.ctx.ip, 
+                                                  logger=self.logger)
+        self.log_t = threading.Thread(target=self.log_server.serve_forever)
+        self.log_t.start()
+        
+    def _shutdown_log_server(self):
+        if hasattr(self, 'log_server'):
+            self.log_server.shutdown()
+            self.log_t.join()
     
     def _check_workers(self):
         while not self.stopped.is_set():
@@ -193,6 +227,10 @@ class Master(object):
         zip_file = os.path.join(self.zip_dir, job_name)
         if os.path.exists(zip_file):
             ZipHandler.uncompress(zip_file, self.job_dir)
+            
+    def _register_runned_job(self, job_name, job_desc):
+        self.runned_job_metas[job_name] = {'job_name': job_desc.name,
+                                           'created': time.time()}
                         
     def run(self):
         self._worker_t = threading.Thread(target=self._check_workers)
@@ -220,6 +258,7 @@ class Master(object):
                                self.worker_tracker.workers.keys())
         job_master.init()
         self.job_tracker.register_job(job_name, job_master)
+        self._register_runned_job(job_name, job_desc)
         
         zip_file = os.path.join(self.zip_dir, job_name+'.zip')
         for worker in job_master.workers:
@@ -274,5 +313,7 @@ class Master(object):
         self._worker_t.join()
         self._job_t.join()
         
+        self.save()
         self.rpc_server.shutdown()
         self.logger.debug('master shutdown finished')
+        self._shutdown_log_server()

@@ -81,7 +81,7 @@ def run_containers(n_containers, n_instances, working_dir, job_def_path,
                    counter_server, budget_server, speed_server,
                    stopped, nonsuspend,
                    block=False, is_multi_process=False,
-                   is_local=False, offset=0):
+                   is_local=False, master_ip=None, offset=0):
     processes = []
     acc = offset * n_instances
     for container_id in range(n_containers):
@@ -98,7 +98,7 @@ def run_containers(n_containers, n_instances, working_dir, job_def_path,
         container = Container(container_id, working_dir, job_def_path, job_name, 
                               env, mq_client, counter_server, budget_server, speed_server,
                               stopped, nonsuspend, n_tasks=n_tasks, is_local=is_local,
-                              task_start_id=acc)
+                              master_ip=master_ip, task_start_id=acc)
         if is_multi_process:
             process = multiprocessing.Process(target=container.run, 
                                               args=(True, ))
@@ -259,7 +259,8 @@ class Job(object):
             self.job_def_path, self.job_name, self.ctx.env, self.mq,
             self.counter_arg, self.budget_arg, self.speed_arg, 
             self.stopped, self.nonsuspend, is_multi_process=self.is_multi_process,
-            is_local=self.ctx.is_local_mode, offset=self.job_offset)
+            is_local=self.ctx.is_local_mode, master_ip=self.ctx.master_ip,
+            offset=self.job_offset)
         if block:
             self.wait_for_stop()
             

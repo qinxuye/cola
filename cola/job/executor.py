@@ -102,12 +102,13 @@ class Executor(object):
             proxies = self.settings.job.proxies
             try:
                 for p in proxies:
-                    proxy_type = p.type or 'all'
+                    proxy_type = p.type if p.has('type') else 'all'
                     if p.addr:
-                        self.opener.add_proxy(p.addr, 
-                                              proxy_type=proxy_type,
-                                              user=p.user,
-                                              password=p.password)
+                        self.opener.add_proxy(
+                            p.addr, 
+                            proxy_type=proxy_type,
+                            user=p.user if p.has('user') else None,
+                            password=p.password if p.has('password') else None)
             except TypeError:
                 return
             

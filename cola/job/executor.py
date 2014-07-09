@@ -103,7 +103,7 @@ class Executor(object):
             try:
                 for p in proxies:
                     proxy_type = p.type if p.has('type') else 'all'
-                    if p.addr:
+                    if p.has('addr'):
                         self.opener.add_proxy(
                             p.addr, 
                             proxy_type=proxy_type,

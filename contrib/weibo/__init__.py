@@ -53,5 +53,5 @@ def get_job_desc():
     
 if __name__ == "__main__":
     from cola.context import Context
-    ctx = Context(local_mode=True, ip='127.0.0.1')
+    ctx = Context(local_mode=True)
     ctx.run_job(os.path.dirname(os.path.abspath(__file__)))

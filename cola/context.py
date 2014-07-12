@@ -40,7 +40,6 @@ from cola.functions.counter import CounterServer
 from cola.job import Job, FINISHED
 from cola.cluster.master import Master
 from cola.cluster.worker import Worker
-from pip.util import is_local
 
 conf_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'conf')
 main_conf = Config(os.path.join(conf_dir, 'main.yaml'))

@@ -130,7 +130,8 @@ class FileBloomFilter(BloomFilter):
                 super(FileBloomFilter, self).__init__(
                     capacity=self.capacity,
                     false_positive_rate=self.false_positive_rate)
-                self.hash = hash_
+                if 'hash_' in locals():
+                    self.hash = hash_
         else:
             self.capacity = capacity
             self.false_positive_rate = false_positive_rate

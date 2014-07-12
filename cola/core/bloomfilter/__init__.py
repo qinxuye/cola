@@ -123,19 +123,24 @@ class FileBloomFilter(BloomFilter):
                     del hash_
                     self.capacity, self.false_positive_rate = \
                         capacity, false_positive_rate
-                    super(FileBloomFilter, self).__init__(
-                        capacity=capacity,
-                        false_positive_rate=false_positive_rate)
                 else:
                     self.capacity = old_capcity
                     self.false_positive_rate = old_false_rate
+                
+                super(FileBloomFilter, self).__init__(
+                    capacity=self.capacity,
+                    false_positive_rate=self.false_positive_rate)
+                self.hash = hash_
         else:
             self.capacity = capacity
             self.false_positive_rate = false_positive_rate
             super(FileBloomFilter, self).__init__(
                 capacity=capacity, 
                 false_positive_rate=false_positive_rate)
-                
+        
+        dirname = os.path.dirname(filename)
+        if not os.path.exists(dirname):
+            os.makedirs(dirname)
         self.f = open(filename, 'w+')
         
     def verify(self, item):

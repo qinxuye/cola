@@ -63,7 +63,8 @@ class BuiltinOpener(Opener):
         is_gzip = resp.headers.dict.get('content-encoding') == 'gzip'
         if is_gzip:
             return self.ungzip(resp)
-        return resp.read()
+        self.content = resp.read()
+        return self.content
     
     def add_proxy(self, addr, proxy_type='all',
                   user=None, password=None):
@@ -125,7 +126,8 @@ class MechanizeOpener(Opener):
         # experimently add `self.br.set_handle_gzip(True)` to handle
         if timeout is None:
             timeout = self._default_timout
-        return self.browser.open(url, data=data, timeout=timeout).read()
+        self.content = self.browser.open(url, data=data, timeout=timeout).read()
+        return self.content
     
     def add_proxy(self, addr, proxy_type='all', 
                   user=None, password=None):
@@ -193,7 +195,8 @@ class SpynnerOpener(Opener):
              wait_for_text=None, wait_for_selector=None, tries=None):
         br = self.spynner_open(url, data=data, headers=headers, method=method, 
                                wait_for_text=wait_for_text, tries=tries)
-        return br.contents
+        self.content = br.contents
+        return self.content
     
     def wait_for_selector(self, selector, **kwargs):
         self.br.wait_for_content(

@@ -151,9 +151,15 @@ class Context(object):
         t = threading.Thread(target=job.run, args=(True, ))
         t.start()
         
+        stopped = multiprocessing.Event()
         def stop(signum, frame):
             if 'main' not in multiprocessing.current_process().name.lower():
                 return
+            if stopped.is_set():
+                return
+            else:
+                stopped.set()
+                
             self.logger.debug("Catch interrupt signal, start to stop")
             job.shutdown()
             if rpc_server:

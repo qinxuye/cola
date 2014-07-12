@@ -91,6 +91,7 @@ class Executor(object):
         self.banned_start = None
         
         self.banned_handler_idx = -1
+        self.handle_banned_by_proxy = False
         self._configure_banned_handler()
         self.banned_handler_size = len(self.banned_handlers)
         
@@ -128,6 +129,7 @@ class Executor(object):
                             continue
                         proxy_type = h.type or 'all'
                         def proxy_handler():
+                            self.handle_banned_by_proxy = True
                             self.opener.add_proxy(h.addr, 
                                                   proxy_type=proxy_type,
                                                   user=h.user,
@@ -235,6 +237,13 @@ class Executor(object):
         index = self.banned_handler_idx % self.banned_handler_size
         self.banned_handlers[index]()
         
+    def _handle_proxy_network_error(self, e):
+        if self.handle_banned_by_proxy and \
+            isinstance(e, NetworkError) and \
+            hasattr(self.opener, 'remove_proxy'):
+            self.opener.remove_proxy()
+            self.handle_banned_by_proxy = False
+        
     def _finish(self, unit):
         if self.logger:
             self.logger.info('Finish %s' % str(unit))
@@ -302,6 +311,8 @@ class UrlExecutor(Executor):
         if url.error_times <= retries:
             self.stopped.wait(span)
             return
+        
+        self._handle_proxy_network_error(e)
         
         if pack:
             content = getattr(self.opener, 'content', None)
@@ -445,6 +456,8 @@ class BundleExecutor(Executor):
                 bundle.current_urls.insert(0, url)
                 self.stopped.wait(span)
                 return
+            
+            self._handle_proxy_network_error(e)
             
             if pack:
                 content = getattr(self.opener, 'content', None)

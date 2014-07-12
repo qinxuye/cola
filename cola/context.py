@@ -40,6 +40,7 @@ from cola.functions.counter import CounterServer
 from cola.job import Job, FINISHED
 from cola.cluster.master import Master
 from cola.cluster.worker import Worker
+from pip.util import is_local
 
 conf_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'conf')
 main_conf = Config(os.path.join(conf_dir, 'main.yaml'))
@@ -95,6 +96,8 @@ class Context(object):
                 self.ip = self.master_ip
             else:
                 self.ip = get_ip()
+                if self.is_local_mode and not self.ip:
+                    self.ip = '127.0.0.1'
         self.master_addr = '%s:%s' % (self.ip, main_conf.master.port)
         self.worker_addr = '%s:%s' % (self.ip, main_conf.worker.port)
         

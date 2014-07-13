@@ -453,7 +453,8 @@ class BundleExecutor(Executor):
             self._log_error(bundle, url, e)
             retries, span, ignore = self._get_handle_error_params(e)
             if retries < 0 or bundle.error_times <= retries:
-                bundle.current_urls.insert(0, url)
+                if url not in bundle.current_urls:
+                    bundle.current_urls.insert(0, url)
                 self.stopped.wait(span)
                 return
             

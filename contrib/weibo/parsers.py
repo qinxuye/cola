@@ -406,6 +406,11 @@ class UserInfoParser(WeiboParser):
                     header_soup = beautiful_soup(data['html'])
                     weibo_user.info.avatar = header_soup.find('div', attrs={'class': 'pf_head_pic'})\
                                                 .find('img')['src']
+                    weibo_user.info.n_follows = int(header_soup.find('ul', attrs={'class': 'user_atten'})\
+                                                    .find('strong', attrs={'node-type': 'follow'}).text)
+                    weibo_user.info.n_fans = int(header_soup.find('ul', attrs={'class': 'user_atten'})\
+                                                 .find('strong', attrs={'node-type': 'fans'}).text)
+                                                    
             elif 'STK' in text:
                 text = text.replace('STK && STK.pageletM && STK.pageletM.view(', '')[:-1]
                 data = json.loads(text)

@@ -31,6 +31,7 @@ from cola.core.utils import Clock
 
 MAX_RUNNING_SECONDS = 10 * 60 # max seconds for a unit in some mq to run
 MAX_BUNDLE_RUNNING_SECONDS = 2 * 60  # max seconds for a bundle to run
+NO_BUDGETS_RETRY_TIMES = 5
 DEFAULT_URL_APPLY_SIZE = 5
 
 TASK_STATUS_FILENAME = 'task.status'
@@ -123,10 +124,17 @@ class Task(object):
                     running = self.job_desc.unit_cls(running)
                 runnings.append(running)
         
+    def _exceed_no_budgets_retry_times(self, retry_times):
+        return retry_times > NO_BUDGETS_RETRY_TIMES
+        
     def run(self):
         try:
             curr_priority = 0
             while not self.stopped.is_set():
+                priority_name = 'inc' if curr_priority == self.n_priorities \
+                                    else curr_priority
+                is_inc = priority_name == 'inc'
+                
                 while not self.nonsuspend.wait(5):
                     continue
                 if self.stopped.is_set():
@@ -136,41 +144,48 @@ class Task(object):
                 clock = Clock()
                 runnings = []
                 try:
+                    no_budgets_times = 0
                     while not self.stopped.is_set():
                         if clock.clock() >= last:
                             break
                         
                         if self.is_bundle:
                             if self.budget_client.apply(1) == 0:
-                                if self.stopped.wait(5):
+                                self.logger.debug('no budget left to process, just wait')
+                                no_budgets_times += 1
+                                if self._exceed_no_budgets_retry_times(no_budgets_times) or \
+                                    self.stopped.wait(5):
                                     break
                                 continue
                         else:
                             if self.budgets == 0:
                                 self.budgets = self.budget_client.apply(DEFAULT_URL_APPLY_SIZE)
                             if self.budgets == 0:
-                                if self.stopped.wait(5):
-                                    return
+                                self.logger.debug('no budget left to process, just wait')
+                                no_budgets_times += 1
+                                if self._exceed_no_budgets_retry_times(no_budgets_times) or \
+                                    self.stopped.wait(5):
+                                    break
                                 continue
                             else:
                                 self.budgets -= 1
                         
+                        no_budgets_times = 0
                         self._get_unit(curr_priority, runnings)
                         if len(runnings) == 0:
                             break
                         if self.is_bundle:
-                            priority_name = 'inc' if curr_priority == self.n_priorities else curr_priority
                             self.logger.debug(
                                 'process bundle from priority %s' % priority_name)
                             rest = min(last - clock.clock(), MAX_BUNDLE_RUNNING_SECONDS)
                             if rest <= 0:
                                 break
-                            obj = self.executor.execute(runnings.pop(), rest)
+                            obj = self.executor.execute(runnings.pop(), rest, is_inc=is_inc)
                         else:
-                            obj = self.executor.execute(runnings.pop())
+                            obj = self.executor.execute(runnings.pop(), is_inc=is_inc)
                             
                         if obj is not None:
-                            runnings.insert(0, obj)           
+                            runnings.insert(0, obj)  
                 finally:
                     self.priorities_objs[curr_priority].extend(runnings)
                     

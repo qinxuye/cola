@@ -79,10 +79,11 @@ class Executor(object):
         self.env = env
         self.is_local = is_local
         self.ip = env.get('ip') or get_ip()
-            
         self.logger = logger
         
         self._configure_proxy()
+        
+        self.processing_inc = False
         
         # used for tracking if banned
         self.is_normal = True
@@ -247,16 +248,26 @@ class Executor(object):
     def _finish(self, unit):
         if self.logger:
             self.logger.info('Finish %s' % str(unit))
-        self.budget_client.finish()
-        self.counter_client.local_inc(self.ip, self.id_,
-                                      'finishes', 1)
-        self.counter_client.global_inc('finishes', 1)
+        if self.processing_inc:
+            self.counter_client.local_inc(self.ip, self.id_,
+                                          'inc_finishes', 1)
+            self.counter_client.global_inc('inc_finishes', 1)
+        else:
+            self.budget_client.finish()
+            self.counter_client.local_inc(self.ip, self.id_,
+                                          'finishes', 1)
+            self.counter_client.global_inc('finishes', 1)
         
     def _error(self):
-        self.budget_client.error()
-        self.counter_client.local_inc(self.ip, self.id_, 
-                                      'errors', 1)
-        self.counter_client.global_inc('errors', 1)
+        if self.processing_inc:
+            self.counter_client.local_inc(self.ip, self.id_, 
+                                          'inc_errors', 1)
+            self.counter_client.global_inc('inc_errors', 1)
+        else: 
+            self.budget_client.error()
+            self.counter_client.local_inc(self.ip, self.id_, 
+                                          'errors', 1)
+            self.counter_client.global_inc('errors', 1)
         
     def _got_banned(self):
         if self.is_normal:
@@ -360,7 +371,7 @@ class UrlExecutor(Executor):
             
         return [url, ]
     
-    def execute(self, url):
+    def execute(self, url, is_inc=False):
         failed = False
         
         while not self.nonsuspend.wait(5):
@@ -371,6 +382,7 @@ class UrlExecutor(Executor):
         if self.logger:
             self.logger.info('get url: %s' % str(url))
         
+        self.processing_inc = is_inc
         rates = 0
         span = 0.0
         parser_cls, options = self.job_desc.url_patterns.get_parser(url, options=True)
@@ -385,7 +397,7 @@ class UrlExecutor(Executor):
             
             try:
                 next_urls = self._parse_with_process_exception(
-                    parser_cls, options, url)
+                    parser_cls, options, url, is_inc=is_inc)
                 next_urls = list(self.job_desc.url_patterns.matches(next_urls))
                 
                 if next_urls:
@@ -516,11 +528,12 @@ class BundleExecutor(Executor):
             
         return [url, ], []
         
-    def execute(self, bundle, max_sec):
+    def execute(self, bundle, max_sec, is_inc=False):
         failed = False
         self.clock = Clock()
         time_exceed = lambda: self.clock.clock() >= max_sec
         
+        self.processing_inc = is_inc
         bundle.current_urls = getattr(bundle, 'current_urls', []) \
                                     or bundle.urls()
         bundle.current_urls.extend(getattr(bundle, 'error_urls', []))

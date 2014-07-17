@@ -254,15 +254,19 @@ class Job(object):
         
     def run(self, block=False):
         self.init()
-        self.processes = run_containers(
-            self.n_containers, self.n_instances, self.working_dir, 
-            self.job_def_path, self.job_name, self.ctx.env, self.mq,
-            self.counter_arg, self.budget_arg, self.speed_arg, 
-            self.stopped, self.nonsuspend, is_multi_process=self.is_multi_process,
-            is_local=self.ctx.is_local_mode, master_ip=self.ctx.master_ip,
-            offset=self.job_offset)
-        if block:
-            self.wait_for_stop()
+        try:
+            self.processes = run_containers(
+                self.n_containers, self.n_instances, self.working_dir, 
+                self.job_def_path, self.job_name, self.ctx.env, self.mq,
+                self.counter_arg, self.budget_arg, self.speed_arg, 
+                self.stopped, self.nonsuspend, is_multi_process=self.is_multi_process,
+                is_local=self.ctx.is_local_mode, master_ip=self.ctx.master_ip,
+                offset=self.job_offset)
+            if block:
+                self.wait_for_stop()
+        finally:
+            if os.path.exists(self.lock_file):
+                os.remove(self.lock_file)
             
     def wait_for_stop(self):
         [process.join() for process in self.processes]

@@ -36,6 +36,8 @@ DEFAULT_URL_APPLY_SIZE = 5
 
 TASK_STATUS_FILENAME = 'task.status'
 
+APPLY_SUCCESS, CANNOT_APPLY, APPLY_FAIL = range(3)
+
 class Task(object):
     def __init__(self, working_dir, job_desc, task_id, 
                  mq, stopped, nonsuspend, 
@@ -123,9 +125,36 @@ class Task(object):
                 if isinstance(running, str):
                     running = self.job_desc.unit_cls(running)
                 runnings.append(running)
+                
+    def _has_not_finished(self, priority):
+        return len(self.priorities_objs[priority]) > 0
         
     def _exceed_no_budgets_retry_times(self, retry_times):
         return retry_times > NO_BUDGETS_RETRY_TIMES
+    
+    def _apply(self, no_budgets_times):
+        if self.is_bundle:
+            if self.budget_client.apply(1) == 0:
+                self.logger.debug('no budget left to process, just wait')
+                no_budgets_times += 1
+                if self._exceed_no_budgets_retry_times(no_budgets_times) or \
+                    self.stopped.wait(5):
+                    return CANNOT_APPLY
+                return APPLY_FAIL
+        else:
+            if self.budgets == 0:
+                self.budgets = self.budget_client.apply(DEFAULT_URL_APPLY_SIZE)
+            if self.budgets == 0:
+                self.logger.debug('no budget left to process, just wait')
+                no_budgets_times += 1
+                if self._exceed_no_budgets_retry_times(no_budgets_times) or \
+                    self.stopped.wait(5):
+                    return CANNOT_APPLY
+                return APPLY_FAIL
+            else:
+                self.budgets -= 1
+                
+        return APPLY_SUCCESS
         
     def run(self):
         try:
@@ -149,28 +178,16 @@ class Task(object):
                         if clock.clock() >= last:
                             break
                         
-                        if self.is_bundle:
-                            if self.budget_client.apply(1) == 0:
-                                self.logger.debug('no budget left to process, just wait')
+                        if not self._has_not_finished(curr_priority):
+                            status = self._apply(no_budgets_times)
+                            if status == CANNOT_APPLY:
+                                break
+                            elif status == APPLY_FAIL:
                                 no_budgets_times += 1
-                                if self._exceed_no_budgets_retry_times(no_budgets_times) or \
-                                    self.stopped.wait(5):
-                                    break
-                                continue
-                        else:
-                            if self.budgets == 0:
-                                self.budgets = self.budget_client.apply(DEFAULT_URL_APPLY_SIZE)
-                            if self.budgets == 0:
-                                self.logger.debug('no budget left to process, just wait')
-                                no_budgets_times += 1
-                                if self._exceed_no_budgets_retry_times(no_budgets_times) or \
-                                    self.stopped.wait(5):
-                                    break
                                 continue
                             else:
-                                self.budgets -= 1
-                        
-                        no_budgets_times = 0
+                                no_budgets_times = 0
+                                                
                         self._get_unit(curr_priority, runnings)
                         if len(runnings) == 0:
                             break

@@ -112,6 +112,15 @@ class Task(object):
                     start = self.job_desc.unit_cls(start)
                 self.priorities_objs[0].append(start)
         
+        if self.is_local:
+            size = self.job_desc.settings.job.size
+            if size <= 0:
+                return
+            
+            for obj in self.priorities_objs[0][size:]:
+                self.mq.put(obj)
+            self.priorities_objs[0] = self.priorities_objs[0][:size]
+        
     def _get_unit(self, priority, runnings):
         if len(self.priorities_objs[priority]) > 0:
             runnings.append(self.priorities_objs[priority].pop(0))
@@ -135,7 +144,7 @@ class Task(object):
     def _apply(self, no_budgets_times):
         if self.is_bundle:
             if self.budget_client.apply(1) == 0:
-                self.logger.debug('no budget left to process, just wait')
+                self.logger.debug('no budget left to process')
                 no_budgets_times += 1
                 if self._exceed_no_budgets_retry_times(no_budgets_times) or \
                     self.stopped.wait(5):
@@ -145,7 +154,7 @@ class Task(object):
             if self.budgets == 0:
                 self.budgets = self.budget_client.apply(DEFAULT_URL_APPLY_SIZE)
             if self.budgets == 0:
-                self.logger.debug('no budget left to process, just wait')
+                self.logger.debug('no budget left to process')
                 no_budgets_times += 1
                 if self._exceed_no_budgets_retry_times(no_budgets_times) or \
                     self.stopped.wait(5):
@@ -169,6 +178,8 @@ class Task(object):
                 if self.stopped.is_set():
                     break
                 
+                self.logger.debug('start to process priority: %s' % priority_name)
+                
                 last = self.priorities_secs[curr_priority]
                 clock = Clock()
                 runnings = []
@@ -178,17 +189,21 @@ class Task(object):
                         if clock.clock() >= last:
                             break
                         
-                        if not self._has_not_finished(curr_priority):
-                            status = self._apply(no_budgets_times)
-                            if status == CANNOT_APPLY:
-                                break
-                            elif status == APPLY_FAIL:
-                                no_budgets_times += 1
+                        status = self._apply(no_budgets_times)
+                        if status == CANNOT_APPLY:
+                            break
+                        elif status == APPLY_FAIL:
+                            no_budgets_times += 1
+                            if not self._has_not_finished(curr_priority) and \
+                                len(runnings) == 0:
                                 continue
-                            else:
-                                no_budgets_times = 0
-                                                
-                        self._get_unit(curr_priority, runnings)
+                            
+                            if len(runnings) == 0:
+                                self._get_unit(curr_priority, runnings)
+                        else:
+                            no_budgets_times = 0
+                            self._get_unit(curr_priority, runnings)
+                            
                         if len(runnings) == 0:
                             break
                         if self.is_bundle:

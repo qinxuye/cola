@@ -164,6 +164,8 @@ class Master(object):
     def _register_rpc(self):
         self.rpc_server.register_function(self.run_job, 'run_job')
         self.rpc_server.register_function(self.stop_job, 'stop_job')
+        self.rpc_server.register_function(self.list_runnable_jobs, 
+                                          'runnable_jobs')
         self.rpc_server.register_function(self.shutdown, 'shutdown')
         self.rpc_server.register_function(self.register_heartbeat, 
                                           'register_heartbeat')
@@ -285,6 +287,16 @@ class Master(object):
         stage.barrier(True, job_name)
         
         job_master.shutdown()
+        
+    def list_runnable_jobs(self):
+        job_dirs = filter(lambda s: os.path.isdir(os.path.join(self.job_dir, s)), 
+                          os.listdir(self.job_dir))
+        
+        jobs = {}
+        for job_dir in job_dirs:
+            desc = import_job_desc(os.path.join(self.job_dir, job_dir))
+            jobs[job_dir] = desc.name
+        return jobs
         
     def has_running_jobs(self):
         return len(self.job_tracker.running_jobs) > 0

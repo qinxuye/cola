@@ -244,7 +244,7 @@ class SpeedControlServer(object):
                     if rate <= 0:
                         self.instance_spans[instance] = 60.0
                     else:
-                        span = (60.0 - rate*page_sec) / rate
+                        span = (60.0 - rate*page_sec) / (rate+2)
                         self.instance_spans[instance] = max(span, 0.0)
             
     def reset(self):

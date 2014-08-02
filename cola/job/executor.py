@@ -590,9 +590,12 @@ class BundleExecutor(Executor):
                     break
         
         if len(bundle.current_urls) == 0 or failed:
-            if not failed:
-                self._finish(bundle)
             if self.settings.job.inc == True:
                 self.mq.put_inc(bundle)
+                
+            if not failed:
+                self._finish(bundle)
+            else:
+                return bundle
         else:
             return bundle

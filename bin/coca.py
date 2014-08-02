@@ -20,7 +20,12 @@ Created on 2013-6-13
 @author: Chine
 '''
 
-import argparse
+from cola.core.errors import DependencyNotInstalledError
+
+try:
+    import argparse
+except ImportError:
+    raise DependencyNotInstalledError('argparse')
 import socket
 import threading
 import os

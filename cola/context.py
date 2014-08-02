@@ -175,12 +175,17 @@ class Context(object):
                 t.join(5)
             except IOError:
                 break
+            
         if not job.stopped.is_set() and job.get_status() == FINISHED:
             self.logger.debug('All objects have been fetched, try to finish job')
             job.shutdown()
             if rpc_server:
                 rpc_server.shutdown()
-        
+        elif not stopped.is_set() and not t.is_alive():
+            job.shutdown()
+            if rpc_server:
+                rpc_server.shutdown()
+
         self.logger.debug('Job id:%s finished, spend %.2f seconds for running' % (
             job_name, clock.clock()))
         

@@ -110,6 +110,9 @@ class UserInfo(EmbeddedDocument):
     qq = StringField()
     msn = StringField()
     
+    n_follows = IntField()
+    n_fans = IntField()
+    
     edu = ListField(EmbeddedDocumentField(EduInfo))
     work = ListField(EmbeddedDocumentField(WorkInfo))
     tags = ListField(StringField())

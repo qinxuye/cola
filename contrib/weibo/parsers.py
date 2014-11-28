@@ -535,7 +535,8 @@ class UserFriendParser(WeiboParser):
                 except ValueError, e:
                     return self._error(url, e)
                 domid = data['domid']
-                if domid.startswith('Pl_Official_LeftHisRelation__'):
+                if domid.startswith('Pl_Official_LeftHisRelation__') or \
+                    domid.startswith('Pl_Official_HisRelation__'):
                     html = beautiful_soup(data['html'])
                 if 'relate' in decodes and decodes['relate'] == 'fans':
                     is_follow = False
@@ -553,10 +554,13 @@ class UserFriendParser(WeiboParser):
         ul = None
         try:
             ul = html.find(attrs={'class': 'cnfList', 'node-type': 'userListBox'})
+            if ul is None:
+                ul = html.find(attrs={'class': 'follow_list', 'node-type': 'userListBox'})
         except AttributeError, e:
             if br.geturl().startswith('http://e.weibo.com'):
                 return [], []
             return self._error(url, e)
+        
         if ul is None:
             urls = []
             if is_follow is True:
@@ -572,30 +576,33 @@ class UserFriendParser(WeiboParser):
                 weibo_user.follows = []
             else:
                 weibo_user.fans = []
-        for li in ul.find_all(attrs={'class': 'S_line1', 'action-type': 'itemClick'}):
-            data = dict([l.split('=') for l in li['action-data'].split('&')])
-            
-            friend = Friend()
-            friend.uid = data['uid']
-            friend.nickname = data['fnick']
-            friend.sex = True if data['sex'] == u'm' else False
-            
-            bundles.append(WeiboUserBundle(str(friend.uid)))
-            if is_follow:
-                weibo_user.follows.append(friend)
-            else:
-                weibo_user.fans.append(friend)
+        for cls in ('S_line1', 'S_line2'):
+            for li in ul.find_all(attrs={'class': cls, 'action-type': 'itemClick'}):
+                data = dict([l.split('=') for l in li['action-data'].split('&')])
+                
+                friend = Friend()
+                friend.uid = data['uid']
+                friend.nickname = data['fnick']
+                friend.sex = True if data['sex'] == u'm' else False
+                
+                bundles.append(WeiboUserBundle(str(friend.uid)))
+                if is_follow:
+                    weibo_user.follows.append(friend)
+                else:
+                    weibo_user.fans.append(friend)
                 
         weibo_user.save()
 #         self.logger.debug('parse %s finish' % url)
         
         urls = []
         pages = html.find('div', attrs={'class': 'W_pages', 'node-type': 'pageList'})
+        if pages is None:
+            pages = html.find('div', attrs={'class': 'WB_cardpage', 'node-type': 'pageList'})
         if pages is not None:
             a = pages.find_all('a')
             if len(a) > 0:
                 next_ = a[-1]
-                if next_['class'] == ['W_btn_c']:
+                if next_['class'] == ['W_btn_c'] or 'next' in next_['class']:
                     decodes['page'] = int(decodes.get('page', 1)) + 1
                     query_str = urllib.urlencode(decodes)
                     url = '%s?%s' % (url.split('?')[0], query_str)

@@ -189,19 +189,23 @@ class Task(object):
                         if clock.clock() >= last:
                             break
                         
-                        status = self._apply(no_budgets_times)
-                        if status == CANNOT_APPLY:
-                            break
-                        elif status == APPLY_FAIL:
-                            no_budgets_times += 1
-                            if not self._has_not_finished(curr_priority) and \
-                                len(runnings) == 0:
-                                continue
-                            
-                            if len(runnings) == 0:
+                        if not is_inc:
+                            status = self._apply(no_budgets_times)
+                            if status == CANNOT_APPLY:
+                                break
+                            elif status == APPLY_FAIL:
+                                no_budgets_times += 1
+                                if not self._has_not_finished(curr_priority) and \
+                                    len(runnings) == 0:
+                                    continue
+                                
+                                if self._has_not_finished(curr_priority) and \
+                                    len(runnings) == 0:
+                                    self._get_unit(curr_priority, runnings)
+                            else:
+                                no_budgets_times = 0
                                 self._get_unit(curr_priority, runnings)
                         else:
-                            no_budgets_times = 0
                             self._get_unit(curr_priority, runnings)
                             
                         if len(runnings) == 0:

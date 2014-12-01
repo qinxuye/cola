@@ -386,7 +386,7 @@ class MessageQueueNodeProxy(object):
         self.mq_node.put_inc(objs)
         
     def get_inc(self, size=1):
-        self.mq_node.get_inc(size=size)
+        return self.mq_node.get_inc(size=size)
     
     def flush(self):
         self.put([], flush=True)

@@ -397,7 +397,7 @@ class UrlExecutor(Executor):
             
             try:
                 next_urls = self._parse_with_process_exception(
-                    parser_cls, options, url, is_inc=is_inc)
+                    parser_cls, options, url)
                 next_urls = list(self.job_desc.url_patterns.matches(next_urls))
                 
                 if next_urls:

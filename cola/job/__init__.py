@@ -314,7 +314,8 @@ class Job(object):
                     
     def get_status(self):
         if self.ctx.is_local_mode and self.status == RUNNING and \
-            self.budget_server.get_status() == ALLFINISHED:
+            self.budget_server.get_status() == ALLFINISHED and \
+            self.settings.job.inc is False:
             return FINISHED
         return self.status
             

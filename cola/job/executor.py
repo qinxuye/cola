@@ -29,8 +29,17 @@ import time
 
 from cola.core.unit import Bundle
 from cola.core.errors import ConfigurationError, LoginFailure, \
-                                ServerError, NetworkError, FetchBannedError
+                                ServerError, NetworkError, FetchBannedError, \
+                                DependencyNotInstalledError
 from cola.core.utils import Clock, get_ip
+
+try:
+    from collections import OrderedDict
+except ImportError:
+    try:
+        from ordereddict import OrderedDict
+    except ImportError:
+        raise DependencyNotInstalledError('ordereddict')
 
 ERROR_MSG_FILENAME = 'error.message'
 ERROR_CONTENT_FILENAME = 'error.content.html'
@@ -582,7 +591,7 @@ class BundleExecutor(Executor):
                             next_urls.insert(0, url)
                         else:
                             random.shuffle(next_urls)
-                    bundle.current_urls = list(set(next_urls))
+                    bundle.current_urls = OrderedDict.fromkeys(next_urls).keys()
                     
                     if bundles:
                         self.mq.put(bundles)

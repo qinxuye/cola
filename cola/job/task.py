@@ -116,7 +116,7 @@ class Task(object):
         
         if self.is_local:
             size = self.job_desc.settings.job.size
-            if size <= 0:
+            if size < 0:
                 return
             
             for obj in self.priorities_objs[0][size:]:
@@ -170,6 +170,7 @@ class Task(object):
     def run(self):
         try:
             curr_priority = 0
+            priority_deals = [True for _ in range(self.full_priorities)]
             while not self.stopped.is_set():
                 priority_name = 'inc' if curr_priority == self.n_priorities \
                                     else curr_priority
@@ -180,7 +181,8 @@ class Task(object):
                 if self.stopped.is_set():
                     break
                 
-                self.logger.debug('start to process priority: %s' % priority_name)
+                if priority_deals[curr_priority] is True:
+                    self.logger.debug('start to process priority: %s' % priority_name)
                 
                 last = self.priorities_secs[curr_priority]
                 clock = Clock()
@@ -194,6 +196,7 @@ class Task(object):
                         if not is_inc:
                             status = self._apply(no_budgets_times)
                             if status == CANNOT_APPLY:
+                                priority_deals[curr_priority] = False
                                 break
                             elif status == APPLY_FAIL:
                                 no_budgets_times += 1
@@ -211,7 +214,10 @@ class Task(object):
                             self._get_unit(curr_priority, self.runnings)
                             
                         if len(self.runnings) == 0:
+                            priority_deals[curr_priority] = False
                             break
+                        else:
+                            priority_deals[curr_priority] = True
                         if self.is_bundle:
                             self.logger.debug(
                                 'process bundle from priority %s' % priority_name)

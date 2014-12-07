@@ -317,6 +317,9 @@ class UrlExecutor(Executor):
         self.counter_client.global_inc('error_urls', 1)
         
     def _handle_error(self, url, e, pack=True):
+        if self.job_desc.error_handler:
+            self.job_desc.error_handler.handle(e, url)
+        
         self._log_error(url, e)
         retries, span, ignore = self._get_handle_error_params(e)
         if url.error_times <= retries:
@@ -461,6 +464,9 @@ class BundleExecutor(Executor):
         # pause clock
         self.clock.pause()
         
+        if self.job_desc.error_handler:
+            self.job_desc.error_handler.handle(e, bundle)
+        
         try:
             self._log_error(bundle, url, e)
             retries, span, ignore = self._get_handle_error_params(e)
@@ -576,7 +582,7 @@ class BundleExecutor(Executor):
                             next_urls.insert(0, url)
                         else:
                             random.shuffle(next_urls)
-                    bundle.current_urls = next_urls
+                    bundle.current_urls = list(set(next_urls))
                     
                     if bundles:
                         self.mq.put(bundles)

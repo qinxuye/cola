@@ -68,6 +68,8 @@ class Task(object):
             [MAX_RUNNING_SECONDS/(2**i) for i in range(self.full_priorities)])
         self.priorities_objs = [[] for _ in range(self.full_priorities)]
         
+        self.runnings = []
+        
         self.is_bundle = self.settings.job.mode == 'bundle'
         self.budgets = 0
         
@@ -182,7 +184,7 @@ class Task(object):
                 
                 last = self.priorities_secs[curr_priority]
                 clock = Clock()
-                runnings = []
+                self.runnings = []
                 try:
                     no_budgets_times = 0
                     while not self.stopped.is_set():
@@ -196,19 +198,19 @@ class Task(object):
                             elif status == APPLY_FAIL:
                                 no_budgets_times += 1
                                 if not self._has_not_finished(curr_priority) and \
-                                    len(runnings) == 0:
+                                    len(self.runnings) == 0:
                                     continue
                                 
                                 if self._has_not_finished(curr_priority) and \
-                                    len(runnings) == 0:
-                                    self._get_unit(curr_priority, runnings)
+                                    len(self.runnings) == 0:
+                                    self._get_unit(curr_priority, self.runnings)
                             else:
                                 no_budgets_times = 0
-                                self._get_unit(curr_priority, runnings)
+                                self._get_unit(curr_priority, self.runnings)
                         else:
-                            self._get_unit(curr_priority, runnings)
+                            self._get_unit(curr_priority, self.runnings)
                             
-                        if len(runnings) == 0:
+                        if len(self.runnings) == 0:
                             break
                         if self.is_bundle:
                             self.logger.debug(
@@ -216,16 +218,20 @@ class Task(object):
                             rest = min(last - clock.clock(), MAX_BUNDLE_RUNNING_SECONDS)
                             if rest <= 0:
                                 break
-                            obj = self.executor.execute(runnings.pop(), rest, is_inc=is_inc)
+                            obj = self.executor.execute(self.runnings.pop(), rest, is_inc=is_inc)
                         else:
-                            obj = self.executor.execute(runnings.pop(), is_inc=is_inc)
+                            obj = self.executor.execute(self.runnings.pop(), is_inc=is_inc)
                             
                         if obj is not None:
-                            runnings.insert(0, obj)  
+                            self.runnings.insert(0, obj)  
                 finally:
-                    self.priorities_objs[curr_priority].extend(runnings)
+                    self.priorities_objs[curr_priority].extend(self.runnings)
                     
                 curr_priority = (curr_priority+1) % self.full_priorities
         finally:
             self.counter_client.sync()
             self.save()
+            
+    def is_idle(self):
+        return all([len(item) == 0 for item in self.priorities_objs]) and \
+                len(self.runnings) == 0

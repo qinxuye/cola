@@ -52,7 +52,7 @@ class JobRunning(Exception): pass
 
 class JobDescription(object):
     def __init__(self, name, url_patterns, opener_cls, user_conf, starts, 
-                 unit_cls=None, login_hook=None, **kw):
+                 unit_cls=None, login_hook=None, error_handler=None, **kw):
         self.name = name
         if not JOB_NAME_RE.match(name):
             raise ConfigurationError('Job name can only contain alphabet, number and space.')

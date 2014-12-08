@@ -46,7 +46,7 @@ from cola.job.container import Container
 
 JOB_NAME_RE = re.compile(r'(\w| )+')
 UNLIMIT_BLOOM_FILTER_CAPACITY = 1000000
-NOTSTARTED, RUNNING, FINISHED = range(3)
+NOTSTARTED, RUNNING, FINISHED, IDLE = range(4)
 
 class JobRunning(Exception): pass
 
@@ -79,7 +79,7 @@ class JobDescription(object):
 def run_containers(n_containers, n_instances, working_dir, job_def_path, 
                    job_name, env, mq,
                    counter_server, budget_server, speed_server,
-                   stopped, nonsuspend,
+                   stopped, nonsuspend, idle_statuses,
                    block=False, is_multi_process=False,
                    is_local=False, master_ip=None, offset=0):
     processes = []
@@ -97,8 +97,8 @@ def run_containers(n_containers, n_instances, working_dir, job_def_path,
             
         container = Container(container_id, working_dir, job_def_path, job_name, 
                               env, mq_client, counter_server, budget_server, speed_server,
-                              stopped, nonsuspend, n_tasks=n_tasks, is_local=is_local,
-                              master_ip=master_ip, task_start_id=acc)
+                              stopped, nonsuspend, idle_statuses, n_tasks=n_tasks, 
+                              is_local=is_local, master_ip=master_ip, task_start_id=acc)
         if is_multi_process:
             process = multiprocessing.Process(target=container.run, 
                                               args=(True, ))
@@ -144,6 +144,8 @@ class Job(object):
         self.job_offset = job_offset
         self.is_multi_process = self.n_containers > 1
         self.processes = []
+        
+        self.idle_statuses = manager.list([False] * self.n_containers)
             
         self.manager = manager
         
@@ -259,7 +261,8 @@ class Job(object):
                 self.n_containers, self.n_instances, self.working_dir, 
                 self.job_def_path, self.job_name, self.ctx.env, self.mq,
                 self.counter_arg, self.budget_arg, self.speed_arg, 
-                self.stopped, self.nonsuspend, is_multi_process=self.is_multi_process,
+                self.stopped, self.nonsuspend, self.idle_statuses, 
+                is_multi_process=self.is_multi_process,
                 is_local=self.ctx.is_local_mode, master_ip=self.ctx.master_ip,
                 offset=self.job_offset)
             if block:
@@ -313,10 +316,13 @@ class Job(object):
             self.clear_running()
                     
     def get_status(self):
-        if self.ctx.is_local_mode and self.status == RUNNING and \
-            self.budget_server.get_status() == ALLFINISHED and \
-            self.settings.job.inc is False:
-            return FINISHED
+        if self.ctx.is_local_mode and self.status == RUNNING:
+            if self.budget_server.get_status() == ALLFINISHED and \
+                self.settings.job.inc is False:
+                return FINISHED
+            if all(list(self.idle_statuses)):
+                return IDLE
+        
         return self.status
             
     def suspend(self):

@@ -37,12 +37,14 @@ from cola.core.zip import ZipHandler
 from cola.functions.budget import BudgetApplyServer
 from cola.functions.speed import SpeedControlServer
 from cola.functions.counter import CounterServer
-from cola.job import Job, FINISHED
+from cola.job import Job, FINISHED, IDLE
 from cola.cluster.master import Master
 from cola.cluster.worker import Worker
 
 conf_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'conf')
 main_conf = Config(os.path.join(conf_dir, 'main.yaml'))
+
+MAX_IDLE_TIMES = 50
 
 class ContextManager(multiprocessing.managers.SyncManager):
     pass
@@ -170,18 +172,33 @@ class Context(object):
         signal.signal(signal.SIGINT, stop)
         signal.signal(signal.SIGTERM, stop)
         
-        while job.get_status() != FINISHED and t.is_alive():
+        idle_times = 0
+        while t.is_alive():
+            if job.get_status() == FINISHED:
+                break
+            if job.get_status() == IDLE:
+                idle_times += 1
+                if idle_times > MAX_IDLE_TIMES:
+                    break
+            else:
+                idle_times = 0
+            
             try:
                 t.join(5)
             except IOError:
                 break
             
+        need_shutdown = False
         if not job.stopped.is_set() and job.get_status() == FINISHED:
             self.logger.debug('All objects have been fetched, try to finish job')
-            job.shutdown()
-            if rpc_server:
-                rpc_server.shutdown()
+            need_shutdown = True
         elif not stopped.is_set() and not t.is_alive():
+            need_shutdown = True
+        elif not job.stopped.is_set() and job.get_status() == IDLE:
+            self.logger.debug('No bundle or url to perform, try to finish job')
+            need_shutdown = True
+            
+        if need_shutdown is True:
             job.shutdown()
             if rpc_server:
                 rpc_server.shutdown()

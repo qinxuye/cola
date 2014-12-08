@@ -35,7 +35,7 @@ class Container(object):
     def __init__(self, container_id, working_dir, 
                  job_path, job_name, env, mq,
                  counter_server, budget_server, speed_server,
-                 stopped, nonsuspend, n_tasks=1, 
+                 stopped, nonsuspend, idle_statuses, n_tasks=1, 
                  is_local=False, master_ip=None, logger=None,
                  task_start_id=0):
         self.container_id = container_id
@@ -51,6 +51,7 @@ class Container(object):
         
         self.stopped = stopped
         self.nonsuspend = nonsuspend
+        self.idle_statuses = idle_statuses
         self.n_tasks = n_tasks
         self.is_local = is_local
         self.master_ip = master_ip
@@ -87,6 +88,7 @@ class Container(object):
                                                            app_name=self.job_name)
             self.init_tasks()
             self._init_counter_sync()
+            self._init_idle_status_checker()
             
             self.inited = True
     
@@ -118,6 +120,14 @@ class Container(object):
             finally:
                 _sync()
         self.sync_t = threading.Thread(target=sync)
+        
+    def _init_idle_status_checker(self):
+        def check():
+            while not self.stopped.is_set():
+                self.idle_statuses[self.container_id] = \
+                    all([task.is_idle() for task in self.tasks])
+                self.stopped.wait(5)
+        self.check_idle_t = threading.Thread(target=check)
             
     def run(self, block=False):
         self.init()
@@ -125,6 +135,7 @@ class Container(object):
         for task in self.task_threads:
             task.start()
         self.sync_t.start()
+        self.check_idle_t.start()
         
         if block:
             self.wait_for_stop()
@@ -138,3 +149,4 @@ class Container(object):
             except KeyboardInterrupt:
                 continue
         self.sync_t.join()
+        self.check_idle_t.join()

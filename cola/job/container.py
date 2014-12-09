@@ -105,6 +105,7 @@ class Container(object):
                         logger=self.logger, env=self.env, 
                         is_local=self.is_local, job_name=self.job_name)
             t = threading.Thread(target=task.run)
+            self.tasks.append(task)
             self.task_threads.append(t)
             
     def _init_counter_sync(self):

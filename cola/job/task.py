@@ -69,6 +69,7 @@ class Task(object):
         self.priorities_objs = [[] for _ in range(self.full_priorities)]
         
         self.runnings = []
+        self.running = None
         
         self.is_bundle = self.settings.job.mode == 'bundle'
         self.budgets = 0
@@ -224,10 +225,13 @@ class Task(object):
                             rest = min(last - clock.clock(), MAX_BUNDLE_RUNNING_SECONDS)
                             if rest <= 0:
                                 break
-                            obj = self.executor.execute(self.runnings.pop(), rest, is_inc=is_inc)
+                            self.running = self.runnings.pop()
+                            obj = self.executor.execute(self.running, rest, is_inc=is_inc)
                         else:
-                            obj = self.executor.execute(self.runnings.pop(), is_inc=is_inc)
+                            self.running = self.runnings.pop()
+                            obj = self.executor.execute(self.running, is_inc=is_inc)
                             
+                        self.running = None
                         if obj is not None:
                             self.runnings.insert(0, obj)  
                 finally:
@@ -240,4 +244,4 @@ class Task(object):
             
     def is_idle(self):
         return all([len(item) == 0 for item in self.priorities_objs]) and \
-                len(self.runnings) == 0
+                len(self.runnings) == 0 and self.running is None

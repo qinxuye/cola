@@ -64,6 +64,7 @@ class JobDescription(object):
         self.user_conf = user_conf
         self.starts = starts
         self.login_hook = login_hook
+        self.error_handler = error_handler
         
         self.settings = Settings(user_conf=user_conf, **kw)
         self.unit_cls = unit_cls or \

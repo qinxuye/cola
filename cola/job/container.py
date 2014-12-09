@@ -149,5 +149,11 @@ class Container(object):
                 task.join()
             except KeyboardInterrupt:
                 continue
-        self.sync_t.join()
-        self.check_idle_t.join()
+        try:
+            self.sync_t.join()
+        except KeyboardInterrupt:
+            pass
+        try:
+            self.check_idle_t.join()
+        except KeyboardInterrupt:
+            pass

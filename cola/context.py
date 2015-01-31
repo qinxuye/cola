@@ -68,21 +68,23 @@ class Context(object):
     fix_ip = lambda _, addr: addr if ':' not in addr \
                     else addr.split(':', 1)[0]
     
-    def __init__(self, local_mode=False, is_master=False, master=None, 
+    def __init__(self, local_mode=False, is_master=False, master_addr=None, 
                  is_client=False, working_dir=None, mkdirs=False, 
                  ip=None, ips=None):
         self.is_local_mode = local_mode
         self.is_master = is_master
         self.is_client = is_client
         
-        self.master = master
-        self.master_ip = self.master
+        self.master_addr = master_addr
+        self.master_ip = self.master_addr
         if not self.is_local_mode:
-            assert self.master is not None
-            if ':' not in self.master:
-                self.master = '%s:%s' % (self.master, main_conf.master.port)
+            if self.master_addr is None:
+                raise ValueError('Master address must be supplied when local_mode is False')
+                
+            if ':' not in self.master_addr:
+                self.master_addr = '%s:%s' % (self.master_addr, main_conf.master.port)
             else:
-                self.master_ip = self.master.split(':', 1)[0]
+                self.master_ip = self.master_addr.split(':', 1)[0]
         
         self.working_dir = working_dir
         if self.working_dir is None:
@@ -99,7 +101,7 @@ class Context(object):
                 self.ip = get_ip()
                 if self.is_local_mode and not self.ip:
                     self.ip = '127.0.0.1'
-        self.master_addr = '%s:%s' % (self.ip, main_conf.master.port)
+        if self.master_addr is None: self.master_addr = '%s:%s' % (self.ip, main_conf.master.port)
         self.worker_addr = '%s:%s' % (self.ip, main_conf.worker.port)
         
         self.ips = ips if ips is not None else []
@@ -112,7 +114,9 @@ class Context(object):
         self.env = self.manager.dict({'ip': self.ip, 
                                       'root': self.working_dir,
                                       'is_local': self.is_local_mode, 
-                                      'master_ip': self.master_ip})
+                                      'master_ip': self.master_ip,
+                                      'job_desc' : {}
+                                      })
         self.logger = get_logger('cola_context')
         
         self.master_rpc_server = None
@@ -139,9 +143,11 @@ class Context(object):
             return src_job_name, src_working_dir
         return job_name, working_dir
         
-    def _run_local_job(self, job_path, overwrite=False, rpc_server=None):
+    def _run_local_job(self, job_path, overwrite=False, rpc_server=None, settings=None):
         job_desc = import_job_desc(job_path)
+        if settings is not None: job_desc.update_settings(settings)
         base_name = job_desc.uniq_name
+        self.env['job_desc'][base_name] = job_desc
         
         working_dir = os.path.join(self.working_dir, 'worker')
         clear = job_desc.settings.job.clear
@@ -149,7 +155,7 @@ class Context(object):
             working_dir, base_name, overwrite=overwrite, clear=clear)
                     
         clock = Clock()
-        job = Job(self, job_path, job_name=job_name, job_desc=job_desc,
+        job = Job(self, job_path, job_name, job_desc=job_desc,
                   working_dir=working_dir, rpc_server=rpc_server,
                   manager=self.manager)
         t = threading.Thread(target=job.run, args=(True, ))
@@ -206,7 +212,7 @@ class Context(object):
         self.logger.debug('Job id:%s finished, spend %.2f seconds for running' % (
             job_name, clock.clock()))
         
-    def run_job(self, job_path, overwrite=False, init_rpc=False):
+    def run_job(self, job_path, overwrite=False, init_rpc=False, settings=None):
         rpc_server = None
         if init_rpc:
             rpc_server = ThreadedColaRPCServer((self.ip, main_conf.worker.port))
@@ -234,21 +240,24 @@ class Context(object):
                 self.worker.run_job(job_name)
             
     def start_master(self):
+        if not self.is_master:
+            return
+        
         if self.master_rpc_server is None:
             self.master_rpc_server = ThreadedColaRPCServer((self.ip, 
                                                             main_conf.master.port))
         
-        master = Master(self)
-        master.run()
+        self.master = Master(self)
+        self.master.run()
         
-        return master
+        return self.master
         
     def start_worker(self):
         if self.worker_rpc_server is None:
             self.worker_rpc_server = ThreadedColaRPCServer((self.ip, 
                                                             main_conf.worker.port))
             
-        worker = Worker(self)
-        worker.run()
+        self.worker = Worker(self)
+        self.worker.run()
         
-        return worker
+        return self.worker

@@ -6,11 +6,8 @@ Created on 2014-6-11
 import unittest
 import tempfile
 import shutil
-import random
-import pickle
 
 from cola.core.mq import MessageQueue, MpMessageQueueClient
-from cola.core.rpc import ThreadedColaRPCServer, client_call
 from cola.core.unit import Url
 
 class Test(unittest.TestCase):

@@ -41,9 +41,10 @@ class Container(object):
         self.container_id = container_id
         self.working_dir = working_dir
         self.mq = mq
-        self.job_desc = import_job_desc(job_path)
         self.env = env
         self.job_name = job_name
+        self.job_desc = env['job_desc'].get(job_name) or \
+                        import_job_desc(job_path)
         
         self.counter_server = counter_server
         self.budget_server = budget_server

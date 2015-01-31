@@ -43,7 +43,7 @@ class WorkerJobInfo(object):
 class Worker(object):
     def __init__(self, ctx):
         self.ctx = ctx
-        self.master = self.ctx.master
+        self.master = self.ctx.master_addr
         self.working_dir = os.path.join(self.ctx.working_dir, 'worker')
         self.job_dir = os.path.join(self.working_dir, 'jobs')
         self.zip_dir = os.path.join(self.working_dir, 'zip')
@@ -110,14 +110,14 @@ class Worker(object):
         
         job_desc = import_job_desc(job_path)
         if settings is not None:
-            job_desc.update(settings)
+            job_desc.update_settings(settings)
         
         job_id = self.ctx.ips.index(self.ctx.ip)
         clear = job_desc.settings.job.clear
         job_name, working_dir = self.ctx._get_name_and_dir(
             self.working_dir, job_name, overwrite=overwrite, clear=clear)
         
-        job = Job(self.ctx, job_path, job_name=job_name, job_desc=job_desc,
+        job = Job(self.ctx, job_path, job_name, job_desc=job_desc,
                   working_dir=working_dir, rpc_server=self.rpc_server,
                   manager=self.ctx.manager, job_offset=job_id)
         t = threading.Thread(target=job.run, args=(True, ))

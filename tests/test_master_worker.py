@@ -81,7 +81,7 @@ class Test(unittest.TestCase):
             pass
 
     def testMasterWorker(self):
-        ctx = Context(is_master=True, master='127.0.0.1', 
+        ctx = Context(is_master=True, master_addr='127.0.0.1', 
                       working_dir=self.working_dir)
         master = ctx.start_master()
         ctx.start_worker()

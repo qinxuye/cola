@@ -77,6 +77,9 @@ class JobDescription(object):
     def add_urlpattern(self, url_pattern):
         self.url_patterns += url_pattern
         
+    def update_settings(self, settings):
+        self.settings.update(settings)
+        
 def run_containers(n_containers, n_instances, working_dir, job_def_path, 
                    job_name, env, mq,
                    counter_server, budget_server, speed_server,
@@ -117,7 +120,7 @@ def run_containers(n_containers, n_instances, working_dir, job_def_path,
     return processes
         
 class Job(object):
-    def __init__(self, ctx, job_def_path, job_name=None, 
+    def __init__(self, ctx, job_def_path, job_name, 
                  job_desc=None, working_dir=None, rpc_server=None,
                  manager=None, job_offset=0):
         self.status = NOTSTARTED
@@ -129,7 +132,7 @@ class Job(object):
         self.nonsuspend.set()
         
         self.job_def_path = job_def_path
-        self.job_name = job_name or self.job_desc.uniq_name
+        self.job_name = job_name
         self.working_dir = working_dir or os.path.join(self.ctx.working_dir, 
                                                        self.job_name)
         self.logger = get_logger(name='cola_job')
@@ -236,7 +239,7 @@ class Job(object):
             self.speed_arg = self.speed_server
         else:
             self.counter_arg, self.budget_arg, self.speed_arg = \
-                tuple([self.ctx.master for _ in range(3)]) 
+                tuple([self.ctx.master_addr for _ in range(3)]) 
         
     def init(self):
         if self.inited:

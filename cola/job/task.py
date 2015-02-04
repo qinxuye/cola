@@ -207,6 +207,7 @@ class Task(object):
                                 
                                 if self._has_not_finished(curr_priority) and \
                                     len(self.runnings) == 0:
+                                    no_budgets_times = 0
                                     self._get_unit(curr_priority, self.runnings)
                             else:
                                 no_budgets_times = 0

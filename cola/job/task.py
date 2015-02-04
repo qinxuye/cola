@@ -67,6 +67,7 @@ class Task(object):
         self.priorities_secs = tuple(
             [MAX_RUNNING_SECONDS/(2**i) for i in range(self.full_priorities)])
         self.priorities_objs = [[] for _ in range(self.full_priorities)]
+        self.starts = []
         
         self.runnings = []
         self.running = None
@@ -87,13 +88,13 @@ class Task(object):
     def save(self):
         save_file = os.path.join(self.dir_, TASK_STATUS_FILENAME)
         with open(save_file, 'w') as f:
-            pickle.dump(self.priorities_objs, f)
+            pickle.dump((self.starts, self.priorities_objs), f)
             
     def load(self):
         save_file = os.path.join(self.dir_, TASK_STATUS_FILENAME)
         if os.path.exists(save_file):
             with open(save_file) as f:
-                self.priorities_objs = pickle.load(f)
+                self.starts, self.priorities_objs = pickle.load(f)
             
     def finish(self):
         self.save()
@@ -113,19 +114,21 @@ class Task(object):
             if not self.mq.exist(start):
                 if not isinstance(start, self.job_desc.unit_cls):
                     start = self.job_desc.unit_cls(start)
-                self.priorities_objs[0].append(start)
+                self.starts.append(start)
         
         if self.is_local:
             size = self.job_desc.settings.job.size
             if size < 0:
                 return
             
-            for obj in self.priorities_objs[0][size:]:
+            for obj in self.starts[size:]:
                 self.mq.put(obj)
-            self.priorities_objs[0] = self.priorities_objs[0][:size]
+            self.starts = self.starts[:size]
         
     def _get_unit(self, priority, runnings):
-        if len(self.priorities_objs[priority]) > 0:
+        if len(self.starts) > 0:
+            runnings.append(self.starts.pop(0))
+        elif len(self.priorities_objs[priority]) > 0:
             runnings.append(self.priorities_objs[priority].pop(0))
         else:
             is_inc = priority == self.n_priorities
@@ -189,29 +192,27 @@ class Task(object):
                 clock = Clock()
                 self.runnings = []
                 try:
-                    no_budgets_times = 0
+                    no_budgets_times = 0                    
                     while not self.stopped.is_set():
                         if clock.clock() >= last:
                             break
                         
                         if not is_inc:
-                            status = self._apply(no_budgets_times)
-                            if status == CANNOT_APPLY:
-                                priority_deals[curr_priority] = False
-                                break
-                            elif status == APPLY_FAIL:
-                                no_budgets_times += 1
-                                if not self._has_not_finished(curr_priority) and \
-                                    len(self.runnings) == 0:
-                                    continue
-                                
-                                if self._has_not_finished(curr_priority) and \
-                                    len(self.runnings) == 0:
-                                    no_budgets_times = 0
-                                    self._get_unit(curr_priority, self.runnings)
-                            else:
+                            if self._has_not_finished(curr_priority):
                                 no_budgets_times = 0
                                 self._get_unit(curr_priority, self.runnings)
+                            else:
+                                status = self._apply(no_budgets_times)
+                                if status == CANNOT_APPLY:
+                                    priority_deals[curr_priority] = False
+                                    break
+                                elif status == APPLY_FAIL:
+                                    no_budgets_times += 1
+                                    if len(self.runnings) == 0:
+                                        continue
+                                else:
+                                    no_budgets_times = 0
+                                    self._get_unit(curr_priority, self.runnings)
                         else:
                             self._get_unit(curr_priority, self.runnings)
                             

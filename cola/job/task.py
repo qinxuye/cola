@@ -126,7 +126,7 @@ class Task(object):
             self.starts = self.starts[:size]
         
     def _get_unit(self, priority, runnings):
-        if len(self.starts) > 0:
+        if priority == 0 and len(self.starts) > 0:
             runnings.append(self.starts.pop(0))
         elif len(self.priorities_objs[priority]) > 0:
             runnings.append(self.priorities_objs[priority].pop(0))

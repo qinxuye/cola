@@ -32,7 +32,7 @@ from cola.core.utils import get_ip, import_job_desc, Clock
 from cola.core.logs import get_logger
 from cola.core.mq import MessageQueue
 from cola.core.dedup import FileBloomFilterDeduper, MapDeduper
-from cola.core.rpc import ThreadedColaRPCServer
+from cola.core.rpc import ThreadedColaRPCServer, client_call
 from cola.core.zip import ZipHandler
 from cola.functions.budget import BudgetApplyServer
 from cola.functions.speed import SpeedControlServer
@@ -261,3 +261,15 @@ class Context(object):
         self.worker.run()
         
         return self.worker
+    
+    def kill_master(self):
+        if self.is_master and self.master is not None:
+            self.master.shutdown()
+        elif self.is_client:
+            client_call(self.master_addr, 'shutdown')
+            
+    def list_workers(self):
+        if self.is_master and self.master is not None:
+            return self.master.list_workers()
+        else:
+            return client_call(self.master_addr, 'list_workers')

@@ -40,6 +40,7 @@ from cola.core.utils import import_job_desc
 from cola.core.logs import get_logger, LogRecordSocketReceiver
 
 RUNNING, HANGUP, STOPPED = range(3)
+STATUSES = ['RUNNING', 'HANGUP', 'STOPPED']
 CONTINOUS_HEARTBEAT = 90
 HEARTBEAT_INTERVAL = 20
 HEARTBEAT_CHECK_INTERVAL = 3*HEARTBEAT_INTERVAL
@@ -166,6 +167,8 @@ class Master(object):
         self.rpc_server.register_function(self.stop_job, 'stop_job')
         self.rpc_server.register_function(self.list_runnable_jobs, 
                                           'runnable_jobs')
+        self.rpc_server.register_function(self.list_workers,
+                                          'list_workers')
         self.rpc_server.register_function(self.shutdown, 'shutdown')
         self.rpc_server.register_function(self.register_heartbeat, 
                                           'register_heartbeat')
@@ -300,6 +303,10 @@ class Master(object):
         
     def has_running_jobs(self):
         return len(self.job_tracker.running_jobs) > 0
+    
+    def list_workers(self):
+        return [(worker, STATUSES[worker_info.status]) for worker, worker_info \
+                in self.worker_tracker.workers.iteritems()]
         
     def _stop_all_jobs(self):
         for job_name in self.job_tracker.running_jobs.keys():

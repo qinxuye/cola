@@ -30,7 +30,7 @@ class MasterCommand(Command):
         
         self.master_parser = parser.add_parser('master', help='master commands')
         self.master_parser.add_argument('-s', '--start', metavar='start master', nargs='?', const=ip,
-                                        help='master connected to(in the former of `ip:port` or `ip`)')
+                                        help='master address(in the former of `ip:port` or `ip`)')
         self.master_parser.add_argument('-k', '--kill', metavar='kill master', nargs='?', const=ip,
                                         help='master to kill(in the former of `ip:port` or `ip`)')
         self.master_parser.add_argument('-l', '--list', metavar='list workers', nargs='?', const=ip,
@@ -50,4 +50,6 @@ class MasterCommand(Command):
             ctx = Context(is_client=True, master_addr=args.list)
             print 'list workers at master:', ctx.master_addr
             for worker, status in ctx.list_workers():
-                print '====> worker:', worker, 'status:', status  
+                print '====> worker:', worker, 'status:', status
+        else:
+            print 'unknown command options'

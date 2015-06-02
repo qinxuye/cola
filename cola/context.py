@@ -273,3 +273,26 @@ class Context(object):
             return self.master.list_workers()
         else:
             return client_call(self.master_addr, 'list_workers')
+        
+    def list_jobs(self):
+        jobs = {}
+        if self.is_master and self.master is not None:
+            runnable_jobs = self.master.list_runnable_jobs()
+            running_jobs = self.master.job_tracker.running_jobs
+        else:
+            runnable_jobs = client_call(self.master_addr, 'runnable_jobs')
+            running_jobs = client_call(self.master_addr, 'running_jobs')
+        for job_id, job_name in runnable_jobs.iteritems():
+            jobs[job_id] = {'name': job_name}
+            if job_id in running_jobs:
+                jobs[job_id]['status'] = 'running'
+            else:
+                jobs[job_id]['status'] = 'stopped'
+        
+        return jobs
+
+    def kill_job(self, job_id):
+        if self.is_master and self.master is not None:
+            self.master.stop_job(job_id)
+        else:
+            client_call('stop_job', job_id)

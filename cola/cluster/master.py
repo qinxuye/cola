@@ -167,6 +167,8 @@ class Master(object):
         self.rpc_server.register_function(self.stop_job, 'stop_job')
         self.rpc_server.register_function(self.list_runnable_jobs, 
                                           'runnable_jobs')
+        self.rpc_server.register_function(lambda: self.job_tracker.running_jobs,
+                                          'running_jobs')
         self.rpc_server.register_function(self.list_workers,
                                           'list_workers')
         self.rpc_server.register_function(self.shutdown, 'shutdown')

@@ -8,6 +8,7 @@ Created on 2015-6-1
 
 import os
 import tempfile
+import pprint
 
 from cola.commands import Command
 from cola.context import Context
@@ -32,7 +33,8 @@ class JobCommand(Command):
                                      help='run a job by the job id or with the `upload` command')
         self.job_parser.add_argument('-t', '--status', metavar='get the status of a job', nargs='?',
                                      help='show the status of a job, and the counters if it\'s running')
-        self.job_parser.add_argument('-p', '--package', metavar='package a job running info', nargs='?',
+        self.job_parser.add_argument('-p', '--package', metavar='package a job running info', 
+                                     nargs='?', action='store_true',
                                      help='package the running info of a job including log and errors infos')
         
     def run(self, args):
@@ -70,4 +72,26 @@ class JobCommand(Command):
                 client_call(ctx.master_addr, 'run_job', job_id, unzip=True)
         elif args.run is not None and args.run != 'U':
             client_call(ctx.master_addr, 'run_job', args.run)
-        
+        elif args.status is not None:
+            job_id = args.status
+            jobs = ctx.list_jobs()
+            if job_id in jobs:
+                matched_jobs = [job_id]
+            else:
+                matched_jobs = [job for job in jobs if job_id in job]
+                
+            if len(matched_jobs) > 1:
+                print 'matched job id is'
+                for matched_job in matched_jobs:
+                    print '====>', matched_job
+                print 'please specify the job id more clearly'
+                return
+            elif len(matched_jobs) == 0:
+                print 'no job id <%s> exists' % job_id
+            else:
+                job_id = matched_jobs[0]
+                info = jobs[job_id]
+                print '====> job id:', job_id, ', job name:', info['name'], ', status:', info['status']
+                if info['status'] == 'running':
+                    print '====> counter:'
+                    print pprint.pformat(ctx.get_job_counter(job_id), width=1)

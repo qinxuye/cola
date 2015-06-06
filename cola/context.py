@@ -295,4 +295,15 @@ class Context(object):
         if self.is_master and self.master is not None:
             self.master.stop_job(job_id)
         else:
-            client_call('stop_job', job_id)
+            client_call(self.master_addr, 'stop_job', job_id)
+            
+    def get_job_counter(self, job_id):
+        if self.is_master and self.master is not None:
+            return self.master.counter_server.output()
+        else:
+            from cola.functions.counter import FUNC_PREFIX
+            from cola.core.utils import get_rpc_prefix
+            
+            func_name = '%s%s' % (get_rpc_prefix(job_id, FUNC_PREFIX), 'get_global')
+            
+            return client_call(self.master_addr, func_name)

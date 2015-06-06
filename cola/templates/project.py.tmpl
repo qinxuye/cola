@@ -1,0 +1,27 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import os
+
+from cola.core.opener import MechanizeOpener
+from cola.core.urls import UrlPatterns
+from cola.job import JobDescription
+
+from conf import starts, user_config, instances
+from bundle import WeiboUserBundle
+
+get_user_conf = lambda s: os.path.join(os.path.dirname(os.path.abspath(__file__)), s)
+user_conf = get_user_conf('{{ name }}.yaml')
+user_config = Config(user_conf)
+
+url_patterns = UrlPatterns(
+)
+
+def get_job_desc():
+    starts = []
+    return JobDescription('{{ name }}', url_patterns, MechanizeOpener, user_config, starts)
+    
+if __name__ == "__main__":
+    from cola.context import Context
+    ctx = Context(local_mode=True)
+    ctx.run_job(os.path.dirname(os.path.abspath(__file__)))

@@ -68,6 +68,8 @@ class CounterServer(object):
                                      prefix=prefix)
         rpc_server.register_function(counter_server.acc_merge, 'acc_merge',
                                      prefix=prefix)
+        rpc_server.register_function(counter_server.output, 'get_global',
+                                     prefix=prefix)
     
     def shutdown(self):
         self.save()

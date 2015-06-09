@@ -307,3 +307,9 @@ class Context(object):
             func_name = '%s%s' % (get_rpc_prefix(job_id, FUNC_PREFIX), 'get_global')
             
             return client_call(self.master_addr, func_name)
+        
+    def pack_job_error(self, job_id):
+        if self.is_master and self.master is not None:
+            return self.master.pack_job_error(job_id)
+        else:
+            client_call(self.master_addr, 'pack_job_error', job_id)

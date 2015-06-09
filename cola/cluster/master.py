@@ -27,6 +27,8 @@ try:
     import cPickle as pickle
 except ImportError:
     import pickle
+import tempfile
+import shutil
 
 from cola.functions.counter import CounterServer
 from cola.functions.budget import BudgetApplyServer, ALLFINISHED
@@ -165,6 +167,7 @@ class Master(object):
     def _register_rpc(self):
         self.rpc_server.register_function(self.run_job, 'run_job')
         self.rpc_server.register_function(self.stop_job, 'stop_job')
+        self.rpc_server.register_function(self.pack_job_error, 'pack_job_error')
         self.rpc_server.register_function(self.list_runnable_jobs, 
                                           'runnable_jobs')
         self.rpc_server.register_function(lambda: self.job_tracker.running_jobs,
@@ -293,6 +296,28 @@ class Master(object):
         
         job_master.shutdown()
         
+    def pack_job_error(self, job_name):
+        job_master = self.job_tracker.get_job_master(job_name)
+        stage = Stage(job_master.workers, 'pack_job_error')
+        stage.barrier(True, job_name)
+        
+        error_dir = os.path.join(self.working_dir, 'errors')
+        if not os.path.exists(error_dir):
+            os.makedirs(error_dir)
+        error_filename = os.path.join(error_dir, '%s_errors.zip'%job_name)
+        
+        suffix = '%s_errors.zip' % job_name
+        temp_dir = tempfile.mkdtemp()
+        try:
+            for name in os.listdir(self.zip_dir):
+                if name.endswith(suffix):
+                    shutil.move(os.path.join(self.zip_dir, name), temp_dir)
+            ZipHandler.compress(error_filename, temp_dir, type_filters='zip')
+        finally:
+            shutil.rmtree(temp_dir)
+            
+        return error_filename
+    
     def list_runnable_jobs(self):
         job_dirs = filter(lambda s: os.path.isdir(os.path.join(self.job_dir, s)), 
                           os.listdir(self.job_dir))

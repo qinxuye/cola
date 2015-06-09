@@ -27,6 +27,8 @@ import urllib
 import multiprocessing
 import time
 import platform
+import tempfile
+import shutil
 from multiprocessing.reduction import reduce_connection
 try:
     import cPickle as pickle
@@ -100,7 +102,7 @@ def beautiful_soup(html, logger=None):
         return BeautifulSoup(html, 'lxml')
     except FeatureNotFound:
         if logger is not None:
-            logger.info('lxml not installed')
+            logger.warning('lxml not installed')
         return BeautifulSoup(html)
     
 def iterable(obj):
@@ -184,3 +186,27 @@ def unpickle_connection(pickled_connection):
 def import_module(module_name):
     root, module = module_name.rsplit('.', 1)
     return getattr(__import__(root, fromlist=['']), module)
+
+def pack_local_job_error(job_name, working_dir=None, logger=None):
+    if working_dir is None:
+        working_dir = os.path.join(tempfile.gettempdir(), 'cola', 'worker', job_name)
+    if not os.path.exists(working_dir):
+        if logger is not None:
+            logger.warning('job data does not exist, no error to pack')
+        return
+    
+    pack_dir = os.path.join(working_dir, 'errors', 'gather')
+    if os.path.exists(pack_dir):
+        shutil.rmtree(pack_dir)
+    if not os.path.exists(pack_dir):
+        os.makedirs(pack_dir)
+        
+    for name in os.listdir(working_dir):
+        path = os.path.join(working_dir, name)
+        
+        # the instance file
+        if os.path.isdir(path) and name.isdigit():
+            for error_file in os.listdir(path):
+                shutil.copy(os.path.join(path, error_file), pack_dir)
+                
+    return pack_dir

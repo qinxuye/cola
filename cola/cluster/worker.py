@@ -23,8 +23,8 @@ Created on 2014-6-8
 import os
 import threading
 
-from cola.core.utils import import_job_desc, Clock
-from cola.core.rpc import FileTransportServer, client_call
+from cola.core.utils import import_job_desc, Clock, pack_local_job_error
+from cola.core.rpc import FileTransportServer, client_call, FileTransportClient
 from cola.core.zip import ZipHandler
 from cola.core.logs import get_logger
 from cola.job import Job
@@ -74,6 +74,8 @@ class Worker(object):
                                               'stop_job')
             self.rpc_server.register_function(self.clear_running_job,
                                               'clear_job')
+            self.rpc_server.register_function(self.pack_job_error,
+                                              'pack_job_error')
             self.rpc_server.register_function(self.add_node, 'add_node')
             self.rpc_server.register_function(self.remove_node, 'remove_node')
             self.rpc_server.register_function(self.shutdown, 'shutdown')
@@ -161,6 +163,17 @@ class Worker(object):
     
     def has_job(self, job_name):
         return job_name in self.running_jobs
+    
+    def pack_job_error(self, job_name):
+        working_dir = os.path.join(self.working_dir, job_name)
+        pack_dir = pack_local_job_error(job_name, working_dir=working_dir, 
+                                        logger=self.logger)
+        zip_filename = os.path.join(self.zip_dir, '%s_%s_errors.zip'%(self.ctx.ip, job_name))
+        if os.path.exists(zip_filename):
+            os.remove(zip_filename)
+        
+        ZipHandler.compress(zip_filename, pack_dir)
+        FileTransportClient(self.master, zip_filename).send_file()
         
     def add_node(self, worker):
         for job_info in self.running_jobs.values():

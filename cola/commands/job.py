@@ -95,3 +95,10 @@ class JobCommand(Command):
                 if info['status'] == 'running':
                     print '====> counter:'
                     print pprint.pformat(ctx.get_job_counter(job_id), width=1)
+        elif args.package is not None:
+            master_error_packed_path = ctx.pack_job_error(args.package)
+            print 'job ', job_id, ' error information files are zipped in the master directory:'
+            print '====> master addr:', ctx.master_addr
+            print '====> master zip file location:', master_error_packed_path
+        else:
+            print 'unknown command options'

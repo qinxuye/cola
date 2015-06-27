@@ -122,6 +122,9 @@ class Context(object):
         self.master_rpc_server = None
         self.worker_rpc_server = None
         
+    def get_cola_dir(self):
+        return os.path.dirname(os.path.abspath(__file__))
+        
     def _get_name_and_dir(self, working_dir, job_name, 
                           overwrite=False, clear=False):
         src_job_name = job_name

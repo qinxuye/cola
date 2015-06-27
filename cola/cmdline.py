@@ -15,20 +15,27 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-Created on 2013-6-16
+Created on 2015-6-27
 
-@author: Chine
+@author: chine
 '''
 
-from cola.core.logs import get_logger
+import argparse
 
-class Command(object):
-    
-    def __init__(self):
-        self.logger = get_logger('cola_command')
-    
-    def add_arguments(self, parser):
-        raise NotImplementedError
-    
-    def run(self):
-        raise NotImplementedError
+from cola.commands.job import JobCommand
+from cola.commands.master import MasterCommand
+from cola.commands.worker import WorkerCommand
+from cola.commands.startproject import StartProjectCommand
+
+parser = argparse.ArgumentParser(prog='cola')
+sub_parsers = parser.add_subparsers(help='sub-commands')
+for command_cls in (JobCommand, MasterCommand, WorkerCommand, StartProjectCommand):
+    command = command_cls()
+    command.add_arguments(sub_parsers)
+
+def execute():
+    args = parser.parse_args()
+    args.func(args)
+
+if __name__ == '__main__':
+    execute()

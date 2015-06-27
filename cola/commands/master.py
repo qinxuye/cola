@@ -42,15 +42,15 @@ class MasterCommand(Command):
         if args.start is not None:
             ctx = Context(is_master=True, master_addr=args.start)
             ctx.start_master()
-            print 'start master at:', ctx.master_addr
+            self.logger.info('start master at: %s' % ctx.master_addr)
         elif args.kill is not None:
             ctx = Context(is_client=True, master_addr=args.kill)
             ctx.kill_master()
-            print 'kill master at:', ctx.master_addr
+            self.logger.info('kill master at: %s' % ctx.master_addr)
         elif args.list is True:
             ctx = Context(is_client=True, master_addr=args.list)
-            print 'list workers at master:', ctx.master_addr
+            self.logger.info('list workers at master: %s' % ctx.master_addr)
             for worker, status in ctx.list_workers():
-                print '====> worker:', worker, ', status:', status
+                self.logger.info('====> worker: %s, status: %s' % (worker, status))
         else:
-            print 'unknown command options'
+            self.logger.error('unknown command options')

@@ -1,6 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 '''
+Copyright (c) 2013 Qin Xuye <qin@qinxuye.me>
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
 Created on 2015-6-1
 
 @author: chine
@@ -36,6 +50,7 @@ class JobCommand(Command):
         self.job_parser.add_argument('-p', '--package', metavar='package a job running info', 
                                      nargs='?', action='store_true',
                                      help='package the running info of a job including log and errors infos')
+        self.job_parser.set_defaults(func=self.run)
         
     def run(self, args):
         master_addr = args.master
@@ -43,21 +58,23 @@ class JobCommand(Command):
         
         if args.list is True:
             jobs = ctx.list_jobs()
-            print 'list jobs at master:', ctx.master_addr
+            self.logger.info('list jobs at master: %s' % ctx.master_addr)
             for job_id, info in jobs.iteritems():
-                print '====> job id:', job_id, ', job_name:', info['name'], ', status:', info['status']
+                self.logger.info(
+                    '====> job id: %s, job_name: %s, status: %s' % \
+                    (job_id, info['name'], info['status']))
         elif args.kill is not None:
             ctx.kill_job(args.kill)
-            print 'killed job:', args.kill
+            self.logger.info('killed job: %s' % args.kill)
         elif args.upload is not None:
             if not os.path.exists(args.upload):
-                print 'upload path does not exist'
+                self.logger.error('upload path does not exist')
                 return
             job_id = None
             try:
                 job_id = import_job_desc(args.upload).uniq_name
             except:
-                print 'job to upload is illegal'
+                self.logger.error('job to upload is illegal')
                 return
             
             temp_filename = tempfile.mktemp(suffix='.zip')
@@ -66,7 +83,7 @@ class JobCommand(Command):
                 FileTransportClient(ctx.master_addr, temp_filename).send_file()
             finally:
                 os.remove(temp_filename)
-            print 'upload job finished'
+            self.logger.info('upload job finished')
             
             if args.run == 'U':
                 client_call(ctx.master_addr, 'run_job', job_id, unzip=True)
@@ -81,24 +98,28 @@ class JobCommand(Command):
                 matched_jobs = [job for job in jobs if job_id in job]
                 
             if len(matched_jobs) > 1:
-                print 'matched job id is'
+                self.logger.info('matched job id is')
                 for matched_job in matched_jobs:
-                    print '====>', matched_job
-                print 'please specify the job id more clearly'
+                    self.logger.info('====> %s' % matched_job)
+                self.logger.info('please specify the job id more clearly')
                 return
             elif len(matched_jobs) == 0:
-                print 'no job id <%s> exists' % job_id
+                self.logger.error('no job id <%s> exists' % job_id)
             else:
                 job_id = matched_jobs[0]
                 info = jobs[job_id]
-                print '====> job id:', job_id, ', job name:', info['name'], ', status:', info['status']
+                self.logger.info(
+                    '====> job id: %s, job name: %s, status: %s' % \
+                    (job_id, info['name'], info['status']))
                 if info['status'] == 'running':
-                    print '====> counter:'
-                    print pprint.pformat(ctx.get_job_counter(job_id), width=1)
+                    self.logger.info('====> counter:\n' \
+                                     + pprint.pformat(ctx.get_job_counter(job_id), width=1))
         elif args.package is not None:
             master_error_packed_path = ctx.pack_job_error(args.package)
-            print 'job ', job_id, ' error information files are zipped in the master directory:'
-            print '====> master addr:', ctx.master_addr
-            print '====> master zip file location:', master_error_packed_path
+            self.logger.info(
+                ('job %s error information files are zipped in the master directory:\n'
+                + '====> master addr: %s\n'
+                + '====> master zip file location: %s') % 
+                (job_id,  ctx.master_addr,  master_error_packed_path))
         else:
-            print 'unknown command options'
+            self.logger.error('unknown command options')

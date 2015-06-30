@@ -26,7 +26,7 @@ from cola.commands import Command
 from cola.context import Context
 
 class StartProjectCommand(Command):
-    def add_argument(self, parser):
+    def add_arguments(self, parser):
         self.start_project_parser = parser.add_parser('startproject', help='startproject command')
         self.start_project_parser.add_argument('project', metavar='project name', nargs=1, 
                                                help='project name to start')

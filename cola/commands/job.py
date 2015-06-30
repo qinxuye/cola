@@ -37,7 +37,7 @@ class JobCommand(Command):
         self.job_parser = parser.add_parser('master', help='job commands')
         self.job_parser.add_argument('-m', '--master', metavar='master address', nargs='?', default=ip,
                                      help='master connected to(in the former of `ip:port` or `ip`)')
-        self.job_parser.add_argument('-l', '--list', metavar='list all jobs', action='store_true',
+        self.job_parser.add_argument('-l', '--list', dest='list all jobs', action='store_true',
                                      help='list all jobs including <id> <name> and <status>' )
         self.job_parser.add_argument('-k', '--kill', metavar='kill some job', nargs='?', 
                                      help='kill job by job name')
@@ -47,8 +47,8 @@ class JobCommand(Command):
                                      help='run a job by the job id or with the `upload` command')
         self.job_parser.add_argument('-t', '--status', metavar='get the status of a job', nargs='?',
                                      help='show the status of a job, and the counters if it\'s running')
-        self.job_parser.add_argument('-p', '--package', metavar='package a job running info', 
-                                     nargs='?', action='store_true',
+        self.job_parser.add_argument('-p', '--package', dest='package a job running info', 
+                                     action='store_true',
                                      help='package the running info of a job including log and errors infos')
         self.job_parser.set_defaults(func=self.run)
         

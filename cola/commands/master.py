@@ -23,8 +23,12 @@ Created on 2015-2-17
 from cola.commands import Command
 from cola.context import Context
 from cola.core.utils import get_ip
+from cola.core.logs import get_logger
 
 class MasterCommand(Command):
+    def __init__(self):
+        self.logger = get_logger('cola_master_command')
+
     def add_arguments(self, parser):
         ip = get_ip()
         

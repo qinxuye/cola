@@ -20,12 +20,7 @@ Created on 2013-6-16
 @author: Chine
 '''
 
-from cola.core.logs import get_logger
-
 class Command(object):
-    
-    def __init__(self):
-        self.logger = get_logger('cola_command')
     
     def add_arguments(self, parser):
         raise NotImplementedError

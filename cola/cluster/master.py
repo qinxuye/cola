@@ -161,6 +161,8 @@ class Master(object):
     
     def save(self):
         job_meta_file = os.path.join(self.working_dir, JOB_META_STATUS_FILENAME)
+        if not os.path.exists(self.working_dir):
+            os.makedirs(self.working_dir)
         with open(job_meta_file, 'w') as f:
             pickle.dump(self.runned_job_metas, f)
         

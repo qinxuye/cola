@@ -27,13 +27,13 @@ from cola.commands.master import MasterCommand
 from cola.commands.worker import WorkerCommand
 from cola.commands.startproject import StartProjectCommand
 
-parser = argparse.ArgumentParser(prog='cola')
-sub_parsers = parser.add_subparsers(help='sub-commands')
-for command_cls in (JobCommand, MasterCommand, WorkerCommand, StartProjectCommand):
-    command = command_cls()
-    command.add_arguments(sub_parsers)
-
 def execute():
+    parser = argparse.ArgumentParser(prog='cola')
+    sub_parsers = parser.add_subparsers(help='sub-commands')
+    for command_cls in (JobCommand, MasterCommand, WorkerCommand, StartProjectCommand):
+        command = command_cls()
+        command.add_arguments(sub_parsers)
+
     args = parser.parse_args()
     args.func(args)
 

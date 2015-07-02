@@ -23,12 +23,16 @@ Created on 2015-6-1
 from cola.commands import Command
 from cola.core.utils import get_ip
 from cola.context import Context
+from cola.core.logs import get_logger
 
 class WorkerCommand(Command):
+    def __init__(self):
+        self.logger = get_logger('cola_worker_command')
+
     def add_arguments(self, parser):
         ip = get_ip()
         
-        self.worker_parser = parser.add_parser('master', help='worker commands')
+        self.worker_parser = parser.add_parser('worker', help='worker commands')
         self.worker_parser.add_argument('-m', '--master', metavar='master address', nargs='?', default=ip,
                                         help='master connected to(in the former of `ip:port` or `ip`)')
         self.worker_parser.add_argument('-s', '--start', metavar='worker address', nargs='?', const=ip,

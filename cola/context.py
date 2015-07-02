@@ -249,7 +249,7 @@ class Context(object):
         if self.master_rpc_server is None:
             self.master_rpc_server = ThreadedColaRPCServer((self.ip, 
                                                             main_conf.master.port))
-        
+
         self.master = Master(self)
         self.master.run()
         

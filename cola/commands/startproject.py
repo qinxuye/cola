@@ -24,8 +24,12 @@ import os
 
 from cola.commands import Command
 from cola.context import Context
+from cola.core.logs import get_logger
 
 class StartProjectCommand(Command):
+    def __init__(self):
+        self.logger = get_logger('cola_startproject_command')
+
     def add_arguments(self, parser):
         self.start_project_parser = parser.add_parser('startproject', help='startproject command')
         self.start_project_parser.add_argument('project', metavar='project name', nargs=1, 

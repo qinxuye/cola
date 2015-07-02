@@ -29,8 +29,12 @@ from cola.context import Context
 from cola.core.utils import get_ip, import_job_desc
 from cola.core.zip import ZipHandler
 from cola.core.rpc import FileTransportClient, client_call
+from cola.core.logs import get_logger
 
 class JobCommand(Command):
+    def __init__(self):
+        self.logger = get_logger('cola_job_command')
+
     def add_arguments(self, parser):
         ip = get_ip()
         

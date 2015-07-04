@@ -38,19 +38,19 @@ class Test(unittest.TestCase):
         assert 'baidu' in opener.open(test_url)
           
         br = opener.browse_open(test_url)
-        assert u'百度' in br.title()
+        assert '百度' in br.title()
         assert 'baidu' in br.response().read()
         
-    def testSpynnerOpener(self):
-        test_url = 'http://s.weibo.com/'
-        opener = SpynnerOpener()
-        
-        br = opener.spynner_open(test_url)
-        br.wk_fill('input.searchInp_form', u'超级月亮')
-        br.click('a.searchBtn')
-        br.wait_for_content(lambda br: 'feed_lists W_linka W_texta' in br.html)
-        
-        self.assertIn(u'超级月亮', br.html)
+    # def testSpynnerOpener(self):
+    #     test_url = 'http://s.weibo.com/'
+    #     opener = SpynnerOpener()
+    #
+    #     br = opener.spynner_open(test_url)
+    #     br.wk_fill('input.searchInp_form', u'超级月亮')
+    #     br.click('a.searchBtn')
+    #     br.wait_for_content(lambda br: 'feed_lists W_linka W_texta' in br.html)
+    #
+    #     self.assertIn(u'超级月亮', br.html)
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

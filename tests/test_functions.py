@@ -122,14 +122,18 @@ class Test(unittest.TestCase):
         self.assertEqual(self.cli.require(10), (10, 0))
         
         self.serv.set_speed(100)
-        self.assertEqual(self.cli.require(100), (100, 0.5))
-        self.assertEqual(self.cli.require(1), (0, 0.5))
+
+        almost = lambda left, right: left[0] == right[0] \
+                                     and abs(left[1] - right[1]) < 0.1
+
+        self.assertTrue(almost(self.cli.require(100), (100, 0.5)))
+        self.assertTrue(almost(self.cli.require(1), (0, 0.5)))
         
         self.serv.set_instance_speed(50)
         self.serv.calc_spans()
         self.serv.reset()
-        self.assertEqual(self.cli.require(50), (50, 1.1))
-        self.assertEqual(self.cli.require(1), (0, 1.1))
+        self.assertTrue(almost(self.cli.require(50), (50, 1.1)))
+        self.assertTrue(almost(self.cli.require(1), (0, 1.1)))
         
         self.serv.set_adaptive(True)
         addr = 'localhost#0'
@@ -142,8 +146,8 @@ class Test(unittest.TestCase):
         self.serv.counter_server.inc(addr, 'secs', 1000)
         self.serv.calc_spans()
         self.serv.reset()
-        self.assertEqual(self.cli.require(24), (24, 0.5))
-        self.assertEqual(self.cli.require(1), (0, 0.5))
+        self.assertTrue(almost(self.cli.require(24), (24, 0.5)))
+        self.assertTrue(almost(self.cli.require(1), (0, 0.5)))
 
 if __name__ == "__main__":
     #import sys;sys.argv = ['', 'Test.testName']

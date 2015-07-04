@@ -25,6 +25,7 @@ try:
     import cPickle as pickle
 except ImportError:
     import pickle
+from collections import OrderedDict
 
 from cola.job.executor import UrlExecutor, BundleExecutor
 from cola.core.utils import Clock
@@ -235,7 +236,8 @@ class Task(object):
                             
                         self.running = None
                         if obj is not None:
-                            self.runnings.insert(0, obj)  
+                            self.runnings.insert(0, obj)
+                            self.runnings = OrderedDict.fromkeys(self.runnings).keys()
                 finally:
                     self.priorities_objs[curr_priority].extend(self.runnings)
                     

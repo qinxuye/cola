@@ -44,7 +44,7 @@ class Test(unittest.TestCase):
         
         wiki_path = os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 
-            'contrib', 'wiki')
+            'app', 'wiki')
         try:
             shutil.copytree(wiki_path, os.path.join(self.job_dir, 'wiki'))
         except OSError, e:
@@ -71,6 +71,7 @@ class Test(unittest.TestCase):
             yaml_obj = yaml.load(f)
             yaml_obj['job']['size'] = 5
             yaml_obj['job']['instances'] = 1
+            yaml_obj['job']['priorities'] = 1
         with open(config_file, 'w') as f:
             yaml.dump(yaml_obj, f)
 

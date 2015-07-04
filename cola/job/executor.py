@@ -421,7 +421,7 @@ class UrlExecutor(Executor):
             except UnitRetryFailed:
                 failed = True
         
-        if self.settings.job.inc == True:
+        if self.settings.job.inc is True:
             self.mq.put_inc(url)
         if not failed:
             self._finish(url)

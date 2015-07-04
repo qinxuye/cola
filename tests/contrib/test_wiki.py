@@ -20,7 +20,7 @@ Created on 2013-5-29
 import unittest
 from datetime import datetime
 
-from contrib.wiki import WikiParser, url_patterns, \
+from app.wiki import WikiParser, url_patterns, \
                          mongo_host, mongo_port, db_name
 
 class FakeWikiParser(WikiParser):

@@ -200,13 +200,16 @@ def pack_local_job_error(job_name, working_dir=None, logger=None):
         shutil.rmtree(pack_dir)
     if not os.path.exists(pack_dir):
         os.makedirs(pack_dir)
-        
+
     for name in os.listdir(working_dir):
         path = os.path.join(working_dir, name)
-        
+
         # the instance file
         if os.path.isdir(path) and name.isdigit():
-            for error_file in os.listdir(path):
-                shutil.copy(os.path.join(path, error_file), pack_dir)
+            error_dir = os.path.join(path, 'errors')
+            if os.path.exists(error_dir):
+                for error_detail_dir in os.listdir(error_dir):
+                    shutil.copytree(os.path.join(error_dir, error_detail_dir),
+                                    os.path.join(pack_dir, error_detail_dir))
                 
     return pack_dir

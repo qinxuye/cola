@@ -26,9 +26,9 @@ import os
 import multiprocessing
 import multiprocessing.managers
 import threading
-import signal
 import pprint
 import socket
+import time
 
 from cola.core.errors import ConfigurationError
 from cola.core.utils import base58_encode, get_cpu_count, \
@@ -135,7 +135,7 @@ class Job(object):
         self.job_name = job_name
         self.working_dir = working_dir or os.path.join(self.ctx.working_dir, 
                                                        self.job_name)
-        self.logger = get_logger(name='cola_job')
+        self.logger = get_logger(name='cola_job'+str(time.time()))
         self.job_desc = job_desc or import_job_desc(job_def_path)
             
         self.settings = self.job_desc.settings
@@ -299,7 +299,7 @@ class Job(object):
             
             for cb in self.shutdown_callbacks:
                 cb()
-            if hasattr(self, 'manager'):
+            if self.ctx.is_local_mode is True and hasattr(self, 'manager'):
                 try:
                     self.manager.shutdown()
                 except socket.error:

@@ -338,7 +338,7 @@ class UrlExecutor(Executor):
         self._handle_proxy_network_error(e)
         
         if pack:
-            content = getattr(self.opener, 'content', None)
+            content = self.opener.read()
             if content is None and isinstance(e, ServerError):
                 content = e.read()
             msg = 'Error when handle url: %s' % str(url)
@@ -486,9 +486,9 @@ class BundleExecutor(Executor):
                 return
             
             self._handle_proxy_network_error(e)
-            
+
             if pack:
-                content = getattr(self.opener, 'content', None)
+                content = self.opener.read()
                 if content is None and isinstance(e, ServerError):
                     content = e.read()
                 msg = 'Error when handle bundle: %s, url: %s' % (str(bundle), 

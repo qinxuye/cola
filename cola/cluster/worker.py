@@ -22,6 +22,7 @@ Created on 2014-6-8
 
 import os
 import threading
+import socket
 
 from cola.core.utils import import_job_desc, Clock, pack_local_job_error
 from cola.core.rpc import FileTransportServer, client_call, FileTransportClient
@@ -115,7 +116,8 @@ class Worker(object):
             job_desc.update_settings(settings)
         
         job_id = self.ctx.ips.index(self.ctx.ip)
-        clear = job_desc.settings.job.clear
+        clear = job_desc.settings.job.clear \
+                    if self.ctx.is_local_mode else False
         job_name, working_dir = self.ctx._get_name_and_dir(
             self.working_dir, job_name, overwrite=overwrite, clear=clear)
         
@@ -168,7 +170,8 @@ class Worker(object):
         working_dir = os.path.join(self.working_dir, job_name)
         pack_dir = pack_local_job_error(job_name, working_dir=working_dir, 
                                         logger=self.logger)
-        zip_filename = os.path.join(self.zip_dir, '%s_%s_errors.zip'%(self.ctx.ip, job_name))
+        zip_filename = os.path.join(self.zip_dir,
+                                    '%s_%s_errors.zip'%(self.ctx.ip.replace('.', '_'), job_name))
         if os.path.exists(zip_filename):
             os.remove(zip_filename)
         
@@ -192,6 +195,11 @@ class Worker(object):
         for job_info in self.running_jobs.values():
             job_info.job.shutdown()
             job_info.thread.join()
+
+        try:
+            self.ctx.manager.shutdown()
+        except socket.error:
+            pass
             
         self.stopped.set()
         self._t.join()

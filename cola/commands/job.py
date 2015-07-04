@@ -23,6 +23,7 @@ Created on 2015-6-1
 import os
 import tempfile
 import pprint
+import shutil
 
 from cola.commands import Command
 from cola.context import Context
@@ -38,10 +39,10 @@ class JobCommand(Command):
     def add_arguments(self, parser):
         ip = get_ip()
         
-        self.job_parser = parser.add_parser('master', help='job commands')
+        self.job_parser = parser.add_parser('job', help='job commands')
         self.job_parser.add_argument('-m', '--master', metavar='master address', nargs='?', default=ip,
                                      help='master connected to(in the former of `ip:port` or `ip`)')
-        self.job_parser.add_argument('-l', '--list', dest='list all jobs', action='store_true',
+        self.job_parser.add_argument('-l', '--list', action='store_true',
                                      help='list all jobs including <id> <name> and <status>' )
         self.job_parser.add_argument('-k', '--kill', metavar='kill some job', nargs='?', 
                                      help='kill job by job name')
@@ -51,15 +52,32 @@ class JobCommand(Command):
                                      help='run a job by the job id or with the `upload` command')
         self.job_parser.add_argument('-t', '--status', metavar='get the status of a job', nargs='?',
                                      help='show the status of a job, and the counters if it\'s running')
-        self.job_parser.add_argument('-p', '--package', dest='package a job running info', 
-                                     action='store_true',
+        self.job_parser.add_argument('-p', '--package', metavar='package a job', nargs='?',
                                      help='package the running info of a job including log and errors infos')
         self.job_parser.set_defaults(func=self.run)
-        
+
+    def _get_matched_job_name(self, ctx, job_id):
+        jobs = ctx.list_jobs()
+        if job_id in jobs:
+            matched_jobs = [job_id]
+        else:
+            matched_jobs = [job for job in jobs if job_id in job]
+
+        if len(matched_jobs) > 1:
+            self.logger.error('matched job id is')
+            for matched_job in matched_jobs:
+                self.logger.info('====> %s' % matched_job)
+            self.logger.error('please specify the job id more clearly')
+        elif len(matched_jobs) == 0:
+            self.logger.error('no job id <%s> exists' % job_id)
+        else:
+            job_id = matched_jobs[0]
+            return job_id
+
     def run(self, args):
         master_addr = args.master
         ctx = Context(is_client=True, master_addr=master_addr)
-        
+
         if args.list is True:
             jobs = ctx.list_jobs()
             self.logger.info('list jobs at master: %s' % ctx.master_addr)
@@ -67,50 +85,54 @@ class JobCommand(Command):
                 self.logger.info(
                     '====> job id: %s, job_name: %s, status: %s' % \
                     (job_id, info['name'], info['status']))
+            if len(jobs) == 0:
+                self.logger.info('no jobs exist')
         elif args.kill is not None:
-            ctx.kill_job(args.kill)
-            self.logger.info('killed job: %s' % args.kill)
+            job_id = self._get_matched_job_name(ctx, args.kill)
+            if job_id is not None:
+                ctx.kill_job(job_id)
+                self.logger.info('killed job: %s' % job_id)
         elif args.upload is not None:
             if not os.path.exists(args.upload):
                 self.logger.error('upload path does not exist')
                 return
+
             job_id = None
             try:
                 job_id = import_job_desc(args.upload).uniq_name
-            except:
-                self.logger.error('job to upload is illegal')
+            except Exception, e:
+                self.logger.exception(e)
+                self.logger.error('uploading job description failed')
                 return
-            
-            temp_filename = tempfile.mktemp(suffix='.zip')
-            ZipHandler.compress(temp_filename, args.upload, type_filters=('pyc', ))
+
+            new_upload_dir = os.path.join(tempfile.gettempdir(), job_id)
+            if os.path.exists(new_upload_dir):
+                shutil.rmtree(new_upload_dir)
+            shutil.copytree(args.upload, new_upload_dir)
+
+            temp_filename = os.path.join(tempfile.gettempdir(), job_id+'.zip')
+            ZipHandler.compress(temp_filename, new_upload_dir, type_filters=('pyc', ))
             try:
                 FileTransportClient(ctx.master_addr, temp_filename).send_file()
             finally:
                 os.remove(temp_filename)
-            self.logger.info('upload job finished')
+                shutil.rmtree(new_upload_dir)
+            self.logger.info('upload job <id: %s> finished' % job_id)
             
             if args.run == 'U':
-                client_call(ctx.master_addr, 'run_job', job_id, unzip=True)
+                client_call(ctx.master_addr, 'run_job', job_id, True)
+                self.logger.info('submit job <id: %s> to the cluster' % job_id)
         elif args.run is not None and args.run != 'U':
-            client_call(ctx.master_addr, 'run_job', args.run)
+            job_id = args.run
+            job_id = self._get_matched_job_name(ctx, job_id)
+            if job_id is not None:
+                client_call(ctx.master_addr, 'run_job', job_id)
+                self.logger.info('start to run job: %s' % job_id)
         elif args.status is not None:
             job_id = args.status
-            jobs = ctx.list_jobs()
-            if job_id in jobs:
-                matched_jobs = [job_id]
-            else:
-                matched_jobs = [job for job in jobs if job_id in job]
-                
-            if len(matched_jobs) > 1:
-                self.logger.info('matched job id is')
-                for matched_job in matched_jobs:
-                    self.logger.info('====> %s' % matched_job)
-                self.logger.info('please specify the job id more clearly')
-                return
-            elif len(matched_jobs) == 0:
-                self.logger.error('no job id <%s> exists' % job_id)
-            else:
-                job_id = matched_jobs[0]
+            job_id = self._get_matched_job_name(ctx, job_id)
+            if job_id is not None:
+                jobs = ctx.list_jobs()
                 info = jobs[job_id]
                 self.logger.info(
                     '====> job id: %s, job name: %s, status: %s' % \
@@ -119,7 +141,11 @@ class JobCommand(Command):
                     self.logger.info('====> counter:\n' \
                                      + pprint.pformat(ctx.get_job_counter(job_id), width=1))
         elif args.package is not None:
-            master_error_packed_path = ctx.pack_job_error(args.package)
+            job_id = args.package
+            job_id = self._get_matched_job_name(ctx, job_id)
+            if job_id is None:
+                return
+            master_error_packed_path = ctx.pack_job_error(job_id)
             self.logger.info(
                 ('job %s error information files are zipped in the master directory:\n'
                 + '====> master addr: %s\n'

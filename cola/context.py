@@ -315,4 +315,4 @@ class Context(object):
         if self.is_master and self.master is not None:
             return self.master.pack_job_error(job_id)
         else:
-            client_call(self.master_addr, 'pack_job_error', job_id)
+            return client_call(self.master_addr, 'pack_job_error', job_id)

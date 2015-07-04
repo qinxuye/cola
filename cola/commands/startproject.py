@@ -42,9 +42,9 @@ class StartProjectCommand(Command):
         return content
         
     def run(self, args):
-        ctx = Context(is_client=True)
+        ctx = Context(is_client=True, local_mode=True)
         
-        project_name = args.project        
+        project_name = args.project[0]
         if ' ' in project_name:
             self.logger.error('project name cannot contain whitespace')
         

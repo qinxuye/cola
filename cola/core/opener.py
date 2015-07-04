@@ -30,6 +30,9 @@ from cola.core.errors import DependencyNotInstalledError
 class Opener(object):
     def open(self, url):
         raise NotImplementedError
+
+    def read(self):
+        raise NotImplementedError
     
     def ungzip(self, fileobj):
         gz = gzip.GzipFile(fileobj=fileobj, mode='rb')
@@ -65,6 +68,9 @@ class BuiltinOpener(Opener):
             return self.ungzip(resp)
         self.content = resp.read()
         return self.content
+
+    def read(self):
+        return self.content if hasattr(self, 'content') else None
     
     def add_proxy(self, addr, proxy_type='all',
                   user=None, password=None):
@@ -148,6 +154,10 @@ class MechanizeOpener(Opener):
             timeout = self._default_timout
         self.browser.open(url, data=data, timeout=timeout)
         return self.browser
+
+    def read(self):
+        return self.content if hasattr(self, 'content') \
+                               else self.browser.response().read()
     
     def close(self):
         resp = self.browser.response()
@@ -197,6 +207,9 @@ class SpynnerOpener(Opener):
                                wait_for_text=wait_for_text, tries=tries)
         self.content = br.contents
         return self.content
+
+    def read(self):
+        return self.content if hasattr(self, 'content') else self.br.contents
     
     def wait_for_selector(self, selector, **kwargs):
         self.br.wait_for_content(

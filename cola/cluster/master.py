@@ -62,6 +62,7 @@ class JobMaster(object):
         self.rpc_server = ctx.master_rpc_server
         
         self.inited = False
+        self.lock = threading.Lock()
         self.init()
         
         self.workers = workers
@@ -85,14 +86,15 @@ class JobMaster(object):
                                                app_name=self.job_name)
         
     def init(self):
-        if self.inited:
-            return
-        
-        self._init_counter_server()
-        self._init_budget_server()
-        self._init_speed_server()
-        
-        self.inited = True
+        with self.lock:
+            if self.inited:
+                return
+
+            self._init_counter_server()
+            self._init_budget_server()
+            self._init_speed_server()
+
+            self.inited = True
                 
     def remove_worker(self, worker):
         if worker not in self.workers:
@@ -116,14 +118,15 @@ class JobMaster(object):
         return worker in self.workers
     
     def shutdown(self):
-        if not self.inited:
-            return
-        
-        self.counter_server.shutdown()
-        self.budget_server.shutdown()
-        self.speed_server.shutdown()
-        
-        self.inited = False
+        with self.lock:
+            if not self.inited:
+                return
+
+            self.counter_server.shutdown()
+            self.budget_server.shutdown()
+            self.speed_server.shutdown()
+
+            self.inited = False
 
 class Master(object):
     def __init__(self, ctx):
@@ -134,9 +137,15 @@ class Master(object):
         self.working_dir = os.path.join(self.ctx.working_dir, 'master')
         self.zip_dir = os.path.join(self.working_dir, 'zip')
         self.job_dir = os.path.join(self.working_dir, 'jobs')
+        if not os.path.exists(self.zip_dir):
+            os.makedirs(self.zip_dir)
+        if not os.path.exists(self.job_dir):
+            os.makedirs(self.job_dir)
         
         self.worker_tracker = WorkerTracker()
         self.job_tracker = JobTracker()
+
+        self.black_list = []
         
         self.stopped = threading.Event()
         
@@ -161,8 +170,6 @@ class Master(object):
     
     def save(self):
         job_meta_file = os.path.join(self.working_dir, JOB_META_STATUS_FILENAME)
-        if not os.path.exists(self.working_dir):
-            os.makedirs(self.working_dir)
         with open(job_meta_file, 'w') as f:
             pickle.dump(self.runned_job_metas, f)
         
@@ -172,7 +179,7 @@ class Master(object):
         self.rpc_server.register_function(self.pack_job_error, 'pack_job_error')
         self.rpc_server.register_function(self.list_runnable_jobs, 
                                           'runnable_jobs')
-        self.rpc_server.register_function(lambda: self.job_tracker.running_jobs,
+        self.rpc_server.register_function(lambda: self.job_tracker.running_jobs.keys(),
                                           'running_jobs')
         self.rpc_server.register_function(self.list_workers,
                                           'list_workers')
@@ -236,7 +243,7 @@ class Master(object):
             self.stopped.wait(JOB_CHECK_INTERVAL)
                         
     def _unzip(self, job_name):
-        zip_file = os.path.join(self.zip_dir, job_name)
+        zip_file = os.path.join(self.zip_dir, job_name+'.zip')
         if os.path.exists(zip_file):
             ZipHandler.uncompress(zip_file, self.job_dir)
             
@@ -260,7 +267,7 @@ class Master(object):
                 stopped = self.stopped.wait(3)
                 if stopped:
                     return
-        
+
         if unzip:
             self._unzip(job_name)
         
@@ -296,7 +303,9 @@ class Master(object):
         stage = Stage(job_master.workers, 'clear_job')
         stage.barrier(True, job_name)
         
-        job_master.shutdown()
+        self.job_tracker.remove_job(job_name)
+
+        self.logger.debug('stop job: %s' % job_name)
         
     def pack_job_error(self, job_name):
         job_master = self.job_tracker.get_job_master(job_name)
@@ -314,7 +323,7 @@ class Master(object):
             for name in os.listdir(self.zip_dir):
                 if name.endswith(suffix):
                     shutil.move(os.path.join(self.zip_dir, name), temp_dir)
-            ZipHandler.compress(error_filename, temp_dir, type_filters='zip')
+            ZipHandler.compress(error_filename, temp_dir)
         finally:
             shutil.rmtree(temp_dir)
             
@@ -340,7 +349,6 @@ class Master(object):
     def _stop_all_jobs(self):
         for job_name in self.job_tracker.running_jobs.keys():
             self.stop_job(job_name)
-            del self.job_tracker.running_jobs[job_name]
             
     def _shutdown_all_workers(self):
         stage = Stage(self.worker_tracker.workers.keys(), 'shutdown')

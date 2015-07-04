@@ -79,22 +79,11 @@ class WeiboParser(Parser):
             self.bundle.weibo_user = WeiboUser(uid=self.uid)
             self.bundle.weibo_user.save()
         return self.bundle.weibo_user
-    
-    def _error(self, url, e):
-        if self.bundle.last_error_page == url:
-            self.bundle.last_error_page_times += 1
-        else:
-            self.bundle.last_error_page = url
-            self.bundle.last_error_page_times = 0
-            
-        if self.bundle.last_error_page_times >= 15:
-            raise e
-        return [url, ], []
 
 class MicroBlogParser(WeiboParser):
     def parse(self, url=None):
-        if self.bundle.exists == False:
-            return [], []
+        if self.bundle.exists is False:
+            return
         
         url = url or self.url
         params = urldecode(url)
@@ -102,7 +91,7 @@ class MicroBlogParser(WeiboParser):
 #         self.logger.debug('load %s finish' % url)
         
         if not self.check(url, br):
-            return [], []
+            return
             
         weibo_user = self.get_weibo_user()
         
@@ -131,7 +120,6 @@ class MicroBlogParser(WeiboParser):
         
         divs = soup.find_all('div', attrs={'class': 'WB_feed_type'},  mid=True)
         max_id = None
-        next_urls = []
         for div in divs:
             mid = div['mid']
             if len(mid) == 0:
@@ -215,15 +203,15 @@ class MicroBlogParser(WeiboParser):
                 query_str = urllib.urlencode(query)
                 if fetch_forward and mblog.n_forwards > 0:
                     forward_url = 'http://weibo.com/aj/mblog/info/big?%s' % query_str
-                    next_urls.append(forward_url)
+                    yield forward_url
                 if fetch_comment and mblog.n_comments > 0:
                     comment_url = 'http://weibo.com/aj/comment/big?%s' % query_str
-                    next_urls.append(comment_url)
+                    yield comment_url
                 if fetch_like and mblog.n_likes > 0:
                     query = {'mid': mid, '_t': 0, '__rnd': int(time.time()*1000)}
                     query_str = urllib.urlencode(query)
                     like_url = 'http://weibo.com/aj/like/big?%s' % query_str
-                    next_urls.append(like_url)
+                    yield like_url
             
             mblog.save()
         
@@ -243,10 +231,9 @@ class MicroBlogParser(WeiboParser):
                 weibo_user.newest_mids.pop()
             weibo_user.last_update = self.bundle.last_update
             weibo_user.save()
-            return [], []
+            return
         
-        next_urls.append('%s?%s'%(url.split('?')[0], urllib.urlencode(params)))
-        return next_urls, []
+        yield '%s?%s'%(url.split('?')[0], urllib.urlencode(params))
     
 class ForwardCommentLikeParser(WeiboParser):
     strptime_lock = Lock()
@@ -280,25 +267,21 @@ class ForwardCommentLikeParser(WeiboParser):
         return dt
     
     def parse(self, url=None):
-        if self.bundle.exists == False:
-            return [], []
+        if self.bundle.exists is False:
+            return
         
         url = url or self.url
-        br = None
-        jsn = None
-        try:
-            br = self.opener.browse_open(url)
-#             self.logger.debug('load %s finish' % url)
-            jsn = json.loads(br.response().read())
-        except (ValueError, URLError) as e:
-            return self._error(url, e)
+        br = self.opener.browse_open(url)
+        jsn = json.loads(br.response().read())
+
+#         self.logger.debug('load %s finish' % url)
         
         soup = beautiful_soup(jsn['data']['html'])
         current_page = jsn['data']['page']['pagenum']
         n_pages = jsn['data']['page']['totalpage']
         
         if not self.check(url, br):
-            return [], []
+            return
         
         decodes = urldecode(url)
         mid = decodes.get('id', decodes.get('mid'))
@@ -344,27 +327,24 @@ class ForwardCommentLikeParser(WeiboParser):
                 like.avatar = li.find('img')['src']
                 
                 mblog.likes.append(like)
-        
-        try:
-            mblog.save()
-#             self.logger.debug('parse %s finish' % url)
-        except ValidationError, e:
-            return self._error(url, e)
+
+        mblog.save()
+#       self.logger.debug('parse %s finish' % url)
         
         if current_page >= n_pages:
-            return [], []
+            return
         
         params = urldecode(url)
         new_params = urldecode('?page=%s'%(current_page+1))
         params.update(new_params)
         params['__rnd'] = int(time.time()*1000)
         next_page = '%s?%s' % (url.split('?')[0] , urllib.urlencode(params))
-        return [next_page, ], []
+        yield next_page
     
 class UserInfoParser(WeiboParser):
     def parse(self, url=None):
-        if self.bundle.exists == False:
-            return [], []
+        if self.bundle.exists is False:
+            return
         
         url = url or self.url
         br = self.opener.browse_open(url)
@@ -372,7 +352,7 @@ class UserInfoParser(WeiboParser):
         soup = beautiful_soup(br.response().read())
         
         if not self.check(url, br):
-            return [], []
+            return
         
         weibo_user = self.get_weibo_user()
         info = weibo_user.info
@@ -408,7 +388,13 @@ class UserInfoParser(WeiboParser):
                     new_style = True
                     info_soup = beautiful_soup(data['html'])
                     for block_div in info_soup.find_all('div', attrs={'class': 'WB_cardwrap'}):
-                        block_title = block_div.find('h4', attrs={'class': 'obj_name'}).text.strip()
+                        block_title_div = block_div.find('h4', attrs={'class': 'obj_name'})
+                        if block_title_div is None:
+                            block_title_div = block_div.find('div', attrs={'class': 'obj_name'})\
+                                .find('h2')
+                        if block_title_div is None:
+                            continue
+                        block_title = block_title_div.text.strip()
                         inner_div = block_div.find('div', attrs={'class': 'WB_innerwrap'})
                         if block_title == u'基本信息':
                             profile_div = inner_div
@@ -604,25 +590,20 @@ class UserInfoParser(WeiboParser):
                 
         weibo_user.save()
 #         self.logger.debug('parse %s finish' % url)
-        return [], []
     
 class UserFriendParser(WeiboParser):
     def parse(self, url=None):
-        if self.bundle.exists == False:
-            return [], []
+        if self.bundle.exists is False:
+            return
         
         url = url or self.url
-        
-        br, soup = None, None
-        try:
-            br = self.opener.browse_open(url)
-#             self.logger.debug('load %s finish' % url)
-            soup = beautiful_soup(br.response().read())
-        except Exception, e:
-            return self._error(url, e)
+
+        br = self.opener.browse_open(url)
+#         self.logger.debug('load %s finish' % url)
+        soup = beautiful_soup(br.response().read())
         
         if not self.check(url, br):
-            return [], []
+            return
         
         weibo_user = self.get_weibo_user()
         
@@ -634,11 +615,7 @@ class UserFriendParser(WeiboParser):
             text = script.text
             if text.startswith('FM.view'):
                 text = text.strip().replace(';', '').replace('FM.view(', '')[:-1]
-                data = None
-                try:
-                    data = json.loads(text)
-                except ValueError, e:
-                    return self._error(url, e)
+                data =  json.loads(text)
                 domid = data['domid']
                 if domid.startswith('Pl_Official_LeftHisRelation__') or \
                     domid.startswith('Pl_Official_HisRelation__'):
@@ -654,8 +631,7 @@ class UserFriendParser(WeiboParser):
                     html = beautiful_soup(data['html'])
                 if data['pid'] == 'pl_relation_hisFans':
                     is_follow = False    
-        
-        bundles = []
+
         ul = None
         try:
             ul = html.find(attrs={'class': 'cnfList', 'node-type': 'userListBox'})
@@ -663,17 +639,16 @@ class UserFriendParser(WeiboParser):
                 ul = html.find(attrs={'class': 'follow_list', 'node-type': 'userListBox'})
         except AttributeError, e:
             if br.geturl().startswith('http://e.weibo.com'):
-                return [], []
-            return self._error(url, e)
+                return
+            raise e
         
         if ul is None:
-            urls = []
             if is_follow is True:
                 if is_new_mode:
-                    urls.append('http://weibo.com/%s/follow?relate=fans' % self.uid)
+                    yield 'http://weibo.com/%s/follow?relate=fans' % self.uid
                 else:
-                    urls.append('http://weibo.com/%s/fans' % self.uid)
-            return urls, bundles
+                    yield 'http://weibo.com/%s/fans' % self.uid
+            return
         
         current_page = decodes.get('page', 1)
         if current_page == 1:
@@ -690,7 +665,7 @@ class UserFriendParser(WeiboParser):
                 friend.nickname = data['fnick']
                 friend.sex = True if data['sex'] == u'm' else False
                 
-                bundles.append(WeiboUserBundle(str(friend.uid)))
+                yield WeiboUserBundle(str(friend.uid))
                 if is_follow:
                     weibo_user.follows.append(friend)
                 else:
@@ -698,8 +673,7 @@ class UserFriendParser(WeiboParser):
                 
         weibo_user.save()
 #         self.logger.debug('parse %s finish' % url)
-        
-        urls = []
+
         pages = html.find('div', attrs={'class': 'W_pages', 'node-type': 'pageList'})
         if pages is None:
             pages = html.find('div', attrs={'class': 'WB_cardpage', 'node-type': 'pageList'})
@@ -711,14 +685,11 @@ class UserFriendParser(WeiboParser):
                     decodes['page'] = int(decodes.get('page', 1)) + 1
                     query_str = urllib.urlencode(decodes)
                     url = '%s?%s' % (url.split('?')[0], query_str)
-                    urls.append(url)
-                    
-                    return urls, bundles
+                    yield url
+                    return
         
         if is_follow is True:
             if is_new_mode:
-                urls.append('http://weibo.com/%s/follow?relate=fans' % self.uid)
+                yield 'http://weibo.com/%s/follow?relate=fans' % self.uid
             else:
-                urls.append('http://weibo.com/%s/fans' % self.uid)
-        
-        return urls, bundles
+                yield 'http://weibo.com/%s/fans' % self.uid

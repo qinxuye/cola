@@ -128,24 +128,22 @@ class WikiParser(Parser):
         
         title, content, last_update = self._extract(soup)
         if title is None:
-            return []
+            return
         title = title + ' ' + lang
         self.store(title, content, last_update)
         
         def _is_same(out_url):
             return out_url.rsplit('#', 1)[0] == url
-        
-        links = []
+
         for link in br.links():
             if link.url.startswith('http://'):
                 out_url = link.url
                 if not _is_same(out_url):
-                    links.append(out_url)
+                    yield out_url
             else:
                 out_url = urlparse.urljoin(link.base_url, link.url)
                 if not _is_same(out_url):
-                    links.append(out_url)
-        return links
+                    yield out_url
 
 url_patterns = UrlPatterns(
     Url(r'^http://(zh|en).wikipedia.org/wiki/[^(:|/)]+$', 'wiki_page', WikiParser)

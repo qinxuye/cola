@@ -664,7 +664,7 @@ class UserFriendParser(WeiboParser):
                 friend.uid = data['uid']
                 friend.nickname = data['fnick']
                 friend.sex = True if data['sex'] == u'm' else False
-                
+
                 yield WeiboUserBundle(str(friend.uid))
                 if is_follow:
                     weibo_user.follows.append(friend)

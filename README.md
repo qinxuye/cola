@@ -3,7 +3,7 @@
 ## Overview
 
 **Cola** is a high-level distributed crawling framework, 
-used to crawl data and extract structured data from pages of websites.
+used to crawl pages and extract structured data from websites.
 It provides simple and fast yet flexible way to achieve your data acquisition objective.
 Users only need to write one piece of code which can run under both local and distributed mode.
 
@@ -14,9 +14,13 @@ Users only need to write one piece of code which can run under both local and di
 
 ## Install
 
-### Source code:
+The quick way:
 
-Download source code, then run:
+```sh
+pip install cola
+```
+
+Or, download source code, then run:
 
 ```sh
 python setup.py install
@@ -29,6 +33,12 @@ Documents will update soon, now just refer to the
 or [weibo](https://github.com/chineking/cola/tree/master/app/weibo) application.
 
 ## Run application
+
+For the wiki or weibo app, please ensure the installation of dependencies, weibo as an example:
+
+```
+pip install -r /path/to/cola/app/weibo/requirements.txt
+```
 
 ### Local mode
 
@@ -60,7 +70,7 @@ Start one or more workers:
 coca worker -s -m [ip:port]
 ```
 
-Then run the application(weibo as example):
+Then run the application(weibo as an example):
 
 ```sh
 coca job -u /path/to/cola/app/weibo -r

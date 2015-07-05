@@ -29,7 +29,6 @@ setup(
         'console_scripts': ['coca = cola.cmdline:execute']
     },
     classifiers=[
-        'Framework :: Cola',
         'Development Status :: 2 - Pre-Alpha',
         'Environment :: Console',
         'Intended Audience :: Developers',

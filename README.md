@@ -158,3 +158,10 @@ coca master -h
 ## Notes
 
 * [Chinese docs(wiki)](https://github.com/chineking/cola/wiki).
+
+## Donation
+
+Cola is a non-profit project and by now sustained by myself, 
+thus any donation will be applied to the improvements of cola project.
+
+**Alipay & Paypal: qinxuye@gmail.com**

@@ -16,7 +16,7 @@ Users only need to write one piece of code which can run under both local and di
 
 ### Source code:
 
-Download code, then run:
+Download source code, then run:
 
 ```sh
 python setup.py install
@@ -130,7 +130,7 @@ You can create an application by this command:
 coca startproject colatest
 ```
 
-Remember, help command will alway be helpful:
+Remember, help command will always be helpful:
  
 ```sh
 coca -h

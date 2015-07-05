@@ -28,7 +28,7 @@ from cola.commands.worker import WorkerCommand
 from cola.commands.startproject import StartProjectCommand
 
 def execute():
-    parser = argparse.ArgumentParser(prog='cola')
+    parser = argparse.ArgumentParser(prog='coca')
     sub_parsers = parser.add_subparsers(help='sub-commands')
     for command_cls in (JobCommand, MasterCommand, WorkerCommand, StartProjectCommand):
         command = command_cls()

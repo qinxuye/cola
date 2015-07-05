@@ -1,0 +1,5 @@
+mechanize
+python-dateutil
+BeautifulSoup4
+mongoengine
+rsa

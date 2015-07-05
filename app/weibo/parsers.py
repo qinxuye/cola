@@ -24,7 +24,6 @@ import time
 import json
 import urllib
 import re
-from urllib2 import URLError
 from datetime import datetime, timedelta
 from threading import Lock
 

@@ -1,5 +1,7 @@
 # Cola: high-level distributed crawling framework
 
+[![PyPI version](https://badge.fury.io/py/cola.svg)](http://badge.fury.io/py/cola)
+
 ## Overview
 
 **Cola** is a high-level distributed crawling framework, 

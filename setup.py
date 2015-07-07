@@ -11,7 +11,7 @@ cola = __import__('cola')
 version = cola.VERSION
 
 long_description = None
-with open(os.path.join(os.path.dirname(__file__), 'README.md')) as f:
+with open(os.path.join(os.path.dirname(__file__), 'README.rst')) as f:
     long_description = f.read()
 
 setup(

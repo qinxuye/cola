@@ -83,7 +83,7 @@ class JobCommand(Command):
             self.logger.info('list jobs at master: %s' % ctx.master_addr)
             for job_id, info in jobs.iteritems():
                 self.logger.info(
-                    '====> job id: %s, job_name: %s, status: %s' % \
+                    '====> job id: %s, job description: %s, status: %s' % \
                     (job_id, info['name'], info['status']))
             if len(jobs) == 0:
                 self.logger.info('no jobs exist')
@@ -135,7 +135,7 @@ class JobCommand(Command):
                 jobs = ctx.list_jobs()
                 info = jobs[job_id]
                 self.logger.info(
-                    '====> job id: %s, job name: %s, status: %s' % \
+                    '====> job id: %s, job description: %s, status: %s' % \
                     (job_id, info['name'], info['status']))
                 if info['status'] == 'running':
                     self.logger.info('====> counter:\n' \

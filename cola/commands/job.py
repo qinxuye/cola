@@ -44,15 +44,15 @@ class JobCommand(Command):
                                      help='master connected to(in the former of `ip:port` or `ip`)')
         self.job_parser.add_argument('-l', '--list', action='store_true',
                                      help='list all jobs including <id> <name> and <status>' )
-        self.job_parser.add_argument('-k', '--kill', metavar='kill some job', nargs='?', 
+        self.job_parser.add_argument('-k', '--kill', metavar='job name', nargs='?',
                                      help='kill job by job name')
-        self.job_parser.add_argument('-u', '--upload', metavar='upload a job', nargs='?', 
+        self.job_parser.add_argument('-u', '--upload', metavar='job directory', nargs='?',
                                      help='upload a job directory to the cluster')
-        self.job_parser.add_argument('-r', '--run', metavar='run a job', nargs='?', const='U',
+        self.job_parser.add_argument('-r', '--run', metavar='job name', nargs='?', const='U',
                                      help='run a job by the job id or with the `upload` command')
-        self.job_parser.add_argument('-t', '--status', metavar='get the status of a job', nargs='?',
+        self.job_parser.add_argument('-t', '--status', metavar='job name', nargs='?',
                                      help='show the status of a job, and the counters if it\'s running')
-        self.job_parser.add_argument('-p', '--package', metavar='package a job', nargs='?',
+        self.job_parser.add_argument('-p', '--package', metavar='job_name', nargs='?',
                                      help='package the running info of a job including log and errors infos')
         self.job_parser.set_defaults(func=self.run)
 

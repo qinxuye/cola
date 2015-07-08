@@ -114,6 +114,11 @@ class BloomFilterFileDamage(Exception): pass
 
 class FileBloomFilter(BloomFilter):
     def __init__(self, filename, capacity, false_positive_rate=0.01):
+        '''
+        A wrapper for :class:`~cola.core.bloomfilter.BloomFilter` with file persistence.
+        When started, it will load the bits from file, at the same time,
+        when shutdown, the bits will be saved into a file.
+        '''
         if os.path.exists(filename) and os.path.getsize(filename) > 0:
             with open(filename) as f:
                 old_capcity, old_false_rate, hash_ = pickle.load(f)

@@ -25,10 +25,8 @@ import threading
 
 from cola.core.mq.node import MessageQueueNodeProxy
 from cola.core.mq.client import MessageQueueClient
-from cola.core.utils import get_rpc_prefix, \
-                            pickle_connection, unpickle_connection
 
-PUT, PUT_INC, GET, GET_INC, EXIST = range(5)
+PUT, PUT_INC, GET, GET_INC, EXIST = range(5) # 5 operations now Cola MQ supports
 
 MessageQueueClient = MessageQueueClient
 

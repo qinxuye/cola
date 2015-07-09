@@ -288,11 +288,20 @@ class MessageQueueNodeProxy(object):
             client_call(addr, self.prefix+'batch_put', pickle.dumps(objs))
             
     def _remote_or_local_get(self, addr, size=1, priority=0):
+        objs = None
         if addr == self.addr_:
-            return self.mq_node.get(size=size, priority=priority)
+            objs = self.mq_node.get(size=size, priority=priority)
         else:
-            return pickle.loads(client_call(addr, self.prefix+'get', 
+            objs = pickle.loads(client_call(addr, self.prefix+'get', 
                                             size, priority))
+        
+        addr_caches = self.caches.get(addr, [])
+        if size == 1 and objs is None and len(addr_caches) > 0:
+            return addr_caches.pop(0)
+        elif size > 1 and len(objs) == 0 and len(addr_caches) > 0:
+            return addr_caches[:size]
+        
+        return objs
             
     def _remote_or_local_put_backup(self, addr, backup_addr, objs, 
                                     force=False):

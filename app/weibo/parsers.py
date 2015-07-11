@@ -219,7 +219,10 @@ class MicroBlogParser(WeiboParser):
         else:
             del params['max_id']
 #         self.logger.debug('parse %s finish' % url)
-                
+
+        # counter add one for the processed weibo list url
+        self.counter.global_inc('processed_weibo_list_page', 1)
+
         # if not has next page
         if len(divs) == 0 or finished:
             weibo_user = self.get_weibo_user()
@@ -231,7 +234,7 @@ class MicroBlogParser(WeiboParser):
             weibo_user.last_update = self.bundle.last_update
             weibo_user.save()
             return
-        
+
         yield '%s?%s'%(url.split('?')[0], urllib.urlencode(params))
     
 class ForwardCommentLikeParser(WeiboParser):
@@ -301,8 +304,10 @@ class ForwardCommentLikeParser(WeiboParser):
             for div in dl.find_all('div'): div.extract()
             for span in dl.find_all('span'): span.extract()
             instance.content = dl.text.strip()
-        
+
+        counter_type = None
         if url.startswith('http://weibo.com/aj/comment'):
+            counter_type = 'comment'
             dls = soup.find_all('dl', mid=True)
             for dl in dls:
                 uid = dl.find('a', usercard=True)['usercard'].split("id=", 1)[1]
@@ -311,6 +316,7 @@ class ForwardCommentLikeParser(WeiboParser):
                 
                 mblog.comments.append(comment)
         elif url.startswith('http://weibo.com/aj/mblog/info'):
+            counter_type = 'forward'
             dls = soup.find_all('dl', mid=True)
             for dl in dls:
                 forward_again_a = dl.find('a', attrs={'action-type': re.compile("^(feed_list|fl)_forward$")})
@@ -320,6 +326,7 @@ class ForwardCommentLikeParser(WeiboParser):
                 
                 mblog.forwards.append(forward)
         elif url.startswith('http://weibo.com/aj/like'):
+            counter_type = 'like'
             lis = soup.find_all('li', uid=True)
             for li in lis:
                 like = Like(uid=li['uid'])
@@ -329,7 +336,11 @@ class ForwardCommentLikeParser(WeiboParser):
 
         mblog.save()
 #       self.logger.debug('parse %s finish' % url)
-        
+
+        # counter add one for the processed forward or comment or like list url
+        if counter_type is not None:
+            self.counter.global_inc('processed_%s_list_page' % counter_type, 1)
+
         if current_page >= n_pages:
             return
         
@@ -586,9 +597,12 @@ class UserInfoParser(WeiboParser):
             else:
                 for a in tags_div.find('span', attrs={'class': 'pt_detail'}).find_all('a'):
                     weibo_user.info.tags.append(a.text.strip())
-                
+
         weibo_user.save()
 #         self.logger.debug('parse %s finish' % url)
+
+        # counter add one for the profile url
+        self.counter.global_inc('processed_profile_page', 1)
     
 class UserFriendParser(WeiboParser):
     def parse(self, url=None):
@@ -672,6 +686,10 @@ class UserFriendParser(WeiboParser):
                 
         weibo_user.save()
 #         self.logger.debug('parse %s finish' % url)
+
+        # counter add one for the friend url
+        counter_type = 'follows' if is_follow else 'fans'
+        self.counter.global_inc('processed_%s_list_page' % counter_type, 1)
 
         pages = html.find('div', attrs={'class': 'W_pages', 'node-type': 'pageList'})
         if pages is None:

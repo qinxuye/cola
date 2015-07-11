@@ -438,7 +438,7 @@ class BundleExecutor(Executor):
             del self.opener.content
             
         res = parser_cls(self.opener, url, bundle=bundle,
-                         logger=self.logger, counter=self.counter_client, 
+                         logger=self.logger, counter=ExecutorCounter(self),
                          **options).parse()
         if isinstance(res, tuple):
             return res

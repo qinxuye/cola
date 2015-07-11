@@ -221,7 +221,7 @@ class MicroBlogParser(WeiboParser):
 #         self.logger.debug('parse %s finish' % url)
 
         # counter add one for the processed weibo list url
-        self.counter.global_inc('processed_weibo_list_page', 1)
+        self.counter.inc('processed_weibo_list_page', 1)
 
         # if not has next page
         if len(divs) == 0 or finished:
@@ -339,7 +339,7 @@ class ForwardCommentLikeParser(WeiboParser):
 
         # counter add one for the processed forward or comment or like list url
         if counter_type is not None:
-            self.counter.global_inc('processed_%s_list_page' % counter_type, 1)
+            self.counter.inc('processed_%s_list_page' % counter_type, 1)
 
         if current_page >= n_pages:
             return
@@ -602,7 +602,7 @@ class UserInfoParser(WeiboParser):
 #         self.logger.debug('parse %s finish' % url)
 
         # counter add one for the profile url
-        self.counter.global_inc('processed_profile_page', 1)
+        self.counter.inc('processed_profile_page', 1)
     
 class UserFriendParser(WeiboParser):
     def parse(self, url=None):
@@ -689,7 +689,7 @@ class UserFriendParser(WeiboParser):
 
         # counter add one for the friend url
         counter_type = 'follows' if is_follow else 'fans'
-        self.counter.global_inc('processed_%s_list_page' % counter_type, 1)
+        self.counter.inc('processed_%s_list_page' % counter_type, 1)
 
         pages = html.find('div', attrs={'class': 'W_pages', 'node-type': 'pageList'})
         if pages is None:

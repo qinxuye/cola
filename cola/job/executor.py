@@ -169,7 +169,7 @@ class Executor(object):
     def _login(self, shuffle=False):
         if self.job_desc.login_hook is not None:
             if 'login' not in self.settings.job or \
-                not isinstance(self.settings.job.login, list):
+                    not isinstance(self.settings.job.login, list):
                 raise ConfigurationError('If login_hook set, config files must contains `login`')
             
             kws = self.settings.job.login
@@ -250,7 +250,7 @@ class Executor(object):
     def _handle_proxy_network_error(self, e):
         if self.handle_banned_by_proxy and \
             isinstance(e, NetworkError) and \
-            hasattr(self.opener, 'remove_proxy'):
+                hasattr(self.opener, 'remove_proxy'):
             self.opener.remove_proxy()
             self.handle_banned_by_proxy = False
         

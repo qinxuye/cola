@@ -30,10 +30,43 @@ PUT, PUT_INC, GET, GET_INC, EXIST = range(5) # 5 operations now Cola MQ supports
 
 MessageQueueClient = MessageQueueClient
 
+
 class MessageQueue(MessageQueueNodeProxy):
+    """
+    The actual API for Cola message queue.
+
+    The message queue uses :class`~cola.core.mq.hash_ring.HashRing`
+    to provide the ability for data distribution, hence when a
+    message queue is initialized, a single message queue node should
+    be aware of the the entire cluster.
+
+    Basically, the Cola message queue may contain multiple priorities
+    as well as several backup copies according to the user's setting.
+    Besides, the incremental queue is also available.
+
+    Actually, this class is a wrapper for
+    :class`~cola.core.mq.node.MessageQueueNodeProxy`
+    to provide the ability for cross-process call.
+    Five operations are supported include ``PUT``, ``PUT_INC``,
+    ``GET``, ``GET_INC`` and ``EXIST``.
+    """
+
     def __init__(self, working_dir, rpc_server, addr, addrs, 
                  app_name=None, copies=1, n_priorities=3,
                  deduper=None):
+        """
+        Initialization method for the Cola message queue.
+
+        :param working_dir: data for the mq should be serialized into this dir
+        :param rpc_server: can be null when running under local mode
+        :param addr: this worker address, as the ``ip:port``
+        :param addrs: the whole worker addresses of the cluster
+        :param app_name: ``optional`` if the mq used for some app
+        :param copies: default as 1, an object will be delivered to the node
+                       on the hash ring if copy is 1
+        :param n_priorities: the mq will include multiple priorities
+        :param deduper: ``optional`` for removing the duplication
+        """
         super(MessageQueue, self).__init__(working_dir, rpc_server, addr, addrs,
                                            copies=copies, n_priorities=n_priorities,
                                            deduper=deduper, app_name=app_name)
@@ -95,6 +128,10 @@ class MessageQueue(MessageQueueNodeProxy):
         [agent.close() for agent in self.agents]
         
 class MpMessageQueueClient(object):
+    """
+    Client of message queue for the multi-processing call
+    """
+
     def __init__(self, conn):
         self.conn = conn
         

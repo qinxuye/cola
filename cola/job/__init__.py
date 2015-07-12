@@ -118,7 +118,8 @@ def run_containers(n_containers, n_instances, working_dir, job_def_path,
     if block:
         [process.join() for process in processes]
     return processes
-        
+
+
 class Job(object):
     def __init__(self, ctx, job_def_path, job_name, 
                  job_desc=None, working_dir=None, rpc_server=None,
@@ -322,7 +323,7 @@ class Job(object):
     def get_status(self):
         if self.ctx.is_local_mode and self.status == RUNNING:
             if self.budget_server.get_status() == ALLFINISHED and \
-                self.settings.job.inc is False:
+                            self.settings.job.inc is False:
                 return FINISHED
             if all(list(self.idle_statuses)):
                 return IDLE

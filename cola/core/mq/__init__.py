@@ -35,7 +35,7 @@ class MessageQueue(MessageQueueNodeProxy):
     """
     The actual API for Cola message queue.
 
-    The message queue uses :class`~cola.core.mq.hash_ring.HashRing`
+    The message queue uses :class:`~cola.core.mq.hash_ring.HashRing`
     to provide the ability for data distribution, hence when a
     message queue is initialized, a single message queue node should
     be aware of the the entire cluster.
@@ -45,7 +45,7 @@ class MessageQueue(MessageQueueNodeProxy):
     Besides, the incremental queue is also available.
 
     Actually, this class is a wrapper for
-    :class`~cola.core.mq.node.MessageQueueNodeProxy`
+    :class:`~cola.core.mq.node.MessageQueueNodeProxy`
     to provide the ability for cross-process call.
     Five operations are supported include ``PUT``, ``PUT_INC``,
     ``GET``, ``GET_INC`` and ``EXIST``.
@@ -63,9 +63,10 @@ class MessageQueue(MessageQueueNodeProxy):
         :param addrs: the whole worker addresses of the cluster
         :param app_name: ``optional`` if the mq used for some app
         :param copies: default as 1, an object will be delivered to the node
-                       on the hash ring if copy is 1
+               on the hash ring if copy is 1
         :param n_priorities: the mq will include multiple priorities
-        :param deduper: ``optional`` for removing the duplication
+        :param deduper: ``optional`` :class:`~cola.core.dedup.Deduper` instance
+               for removing the duplication
         """
         super(MessageQueue, self).__init__(working_dir, rpc_server, addr, addrs,
                                            copies=copies, n_priorities=n_priorities,
@@ -126,7 +127,8 @@ class MessageQueue(MessageQueueNodeProxy):
         self.stopped.set()
         self._join()
         [agent.close() for agent in self.agents]
-        
+
+
 class MpMessageQueueClient(object):
     """
     Client of message queue for the multi-processing call

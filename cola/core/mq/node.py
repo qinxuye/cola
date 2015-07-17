@@ -252,6 +252,20 @@ class LocalMessageQueueNode(object):
 
 
 class MessageQueueNodeProxy(object):
+    """
+    This class maintains an instance of :class:`~cola.core.mq.node.LocalMessageQueueNode`,
+    and provide `PUT` and `GET` relative method.
+    In each mq operation, it will execute a local or remote call by judging the address.
+    The Remote call will actually send a RPC to the destination worker's instance which
+    execute the method provided by :class:`~cola.core.mq.node.LocalMessageQueueNode`.
+
+    Besides, this class also maintains an instance of :class:`~cola.core.mq.distributor.Distributor`
+    which holds a hash ring. To an object of `PUT` operation, the object should be distributed to
+    the destination according to the mechanism of the hash ring. Remember, a cache will be created
+    to avoid the frequent write operations which may cause high burden of a message queue node.
+    To `GET` operation, the mq will just fetch an object from the local node,
+    or request from other nodes if local one's objects are exhausted.
+    """
     def __init__(self, base_dir, rpc_server, addr, addrs,
                  copies=1, n_priorities=3, deduper=None,
                  app_name=None, logger=None):
@@ -361,6 +375,17 @@ class MessageQueueNodeProxy(object):
                         pickle.dumps(objs), force)
                     
     def put(self, objects, flush=False):
+        """
+        Put a bunch of objects into the mq. The objects will be distributed
+        to different mq nodes according to the instance of
+        :class:`~cola.core.mq.distributor.Distributor`.
+        There also exists a cache which will not flush out unless the parameter flush
+        is true or a single destination cache is full.
+
+        :param objects: objects to put into mq, an object is mostly the instance of
+               :class:`~cola.core.unit.Url` or :class:`~cola.core.unit.Bundle`
+        :param flush: flush out the cache all if set to true
+        """
         self.init()
         
         addrs_objs, backup_addrs_objs = \
@@ -406,6 +431,15 @@ class MessageQueueNodeProxy(object):
                         self.backup_caches[addr][backup_addr] = []
             
     def get(self, size=1, priority=0):
+        """
+        Get a bunch of objects from the message queue.
+        This method will try to fetch objects from local node as much as wish.
+        If not enough, will try to fetch from the other nodes.
+
+        :param size: the objects wish to fetch
+        :param priority: the priority queue which wants to fetch from
+        :return: the objects which to handle
+        """
         self.init()
         
         if size < 1: size = 1

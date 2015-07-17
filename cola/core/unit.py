@@ -29,6 +29,7 @@ class Unit(object):
     def __str__(self):
         raise NotImplementedError
 
+
 class Url(Unit):
     def __init__(self, url, force=False, priority=0):
         super(Url, self).__init__(url, force=force, 
@@ -40,6 +41,7 @@ class Url(Unit):
     
     def __eq__(self, url):
         return self.url == url.url
+
 
 class Bundle(Unit):
     '''

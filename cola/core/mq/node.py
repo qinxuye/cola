@@ -49,7 +49,8 @@ class LocalMessageQueueNode(object):
     can also be in charge of handling the remote call.
     This node includes several storage such as priority storage
     for each priority, incremental storage as well as the
-    backup storage.
+    backup storage. Each storage is an instance of
+    :class:`~cola.core.mq.store.Store`.
     """
     def __init__(self, base_dir, rpc_server, addr, addrs,
                  copies=1, n_priorities=3, deduper=None,

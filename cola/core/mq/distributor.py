@@ -26,13 +26,23 @@ from cola.core.utils import iterable
 from cola.core.mq.hash_ring import HashRing
 from cola.core.mq.utils import labelize
 
+
 class Distributor(object):
+    """
+    Given several objects, to decides which message queue node each one belong to.
+    """
     def __init__(self, addrs, copies=1):
         self.nodes = list(addrs)
         self.hash_ring = HashRing(self.nodes)
         self.copies = min(copies, len(self.nodes)-1)
         
     def distribute(self, objs):
+        """
+        :param objs: the objects
+        :return: a tuple with two dicts,
+                 the first is the mapping from the node address to the belonged objects,
+                 the second is the mapping from the backup node address and the objects
+        """
         node_objs = defaultdict(list)
         backup_node_objs = defaultdict(lambda: defaultdict(list))
         

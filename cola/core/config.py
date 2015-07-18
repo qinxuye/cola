@@ -29,7 +29,32 @@ try:
 except ImportError:
     raise DependencyNotInstalledError('pyyaml')
 
+
 class PropertyObject(dict):
+    """
+    Wrapper of dict, providing the ability to get the key by the property.
+
+    As an instance:
+
+    >>> obj = PropertyObject({'k': 'v'})
+    >>> obj.k
+    'v'
+    >>> obj.update(k={'sk': 'sv'})
+    >>> obj
+    {'k': {'sk': 'sv'}}
+    >>> obj.k.sk
+    'sv'
+
+    Remember that do not directly set the key like:
+    >>> obj['nk'] = 'nv'
+    >>> obj.nk
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+    AttributeError: 'PropertyObject' object has no attribute 'nk'
+    >>> obj.update(nk='nv')
+    >>> obj.nk
+    'nv'
+    """
     def __init__(self, d=None):
         d = d or {}
         super(PropertyObject, self).__init__()
@@ -58,6 +83,12 @@ class PropertyObject(dict):
                 self._set(k, v)
                     
     def update(self, config=None, **kwargs):
+        """
+        Update by either dict or :class:`Config`.
+
+        :param config: either dict or instance of :class:`Config`
+        :param kwargs:
+        """
         self._update(kwargs)
         if config is not None:
             if isinstance(config, dict):
@@ -68,7 +99,13 @@ class PropertyObject(dict):
     def has(self, k):
         return hasattr(self, k)
 
+
 class Config(object):
+    """
+    Read a yaml config file, and store the value
+    which actually is the instance of :class:`PropertyObject`
+    to the ``conf`` property.
+    """
     def __init__(self, yaml_file):
         if isinstance(yaml_file, str):
             f = open(yaml_file)

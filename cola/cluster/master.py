@@ -288,12 +288,17 @@ class Master(object):
         self.logger.debug(
             'job available workers: %s' % job_master.workers)
         stage = Stage(job_master.workers, 'prepare')
-        stage.barrier(True, job_name)
+        prepared_ok = stage.barrier(True, job_name)
+        if not prepared_ok:
+            self.logger.error("prepare for running failed")
+            return
         
         self.logger.debug(
             'entering the master run_job stage, job id: %s' % job_name)
         stage = Stage(job_master.workers, 'run_job')
-        stage.barrier(True, job_name)
+        run_ok = stage.barrier(True, job_name)
+        if not run_ok:
+            self.logger.error("run job failed, job id: %s" % job_name)
         
     def stop_job(self, job_name):
         job_master = self.job_tracker.get_job_master(job_name)

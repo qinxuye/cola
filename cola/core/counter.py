@@ -63,7 +63,7 @@ class AddAggregator(Aggregator):
         return combiner1
     
     def merge_val(self, combiner, val):
-        combiner1 += val
+        combiner += val
         return combiner
 
 

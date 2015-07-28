@@ -37,20 +37,27 @@ class Stage(object):
         self.remote_func = self.prefix + func
         
     def barrier(self, parallel, *args):
-        def _call(worker):
-            client_call(worker, self.remote_func, *args)
+        results = [False] * len(self.workers)
+
+        def _call(i, worker):
+            result = client_call(worker, self.remote_func, *args)
+            if isinstance(result, bool):
+                results[i] = result
+            else:
+                results[i] = True
         
         if not parallel:
-            for worker in self.workers:
-                _call(worker)
+            for i, worker in enumerate(self.workers):
+                _call(i, worker)
         else:
             threads = []
-            for worker in self.workers:
-                t = threading.Thread(target=_call, args=(worker, ))
+            for i, worker in enumerate(self.workers):
+                t = threading.Thread(target=_call, args=(i, worker, ))
                 t.setDaemon(True)
                 threads.append(t)
             for t in threads:
                 t.start()               
             for t in threads:
                 t.join()
-                
+
+        return all(results)

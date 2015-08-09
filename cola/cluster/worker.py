@@ -45,7 +45,8 @@ class Worker(object):
     def __init__(self, ctx):
         self.ctx = ctx
         self.master = self.ctx.master_addr
-        self.working_dir = os.path.join(self.ctx.working_dir, 'worker')
+        addr_dirname = self.ctx.addr.replace('.', '_').replace(':', '_')
+        self.working_dir = os.path.join(self.ctx.working_dir, 'worker', addr_dirname)
         self.job_dir = os.path.join(self.working_dir, 'jobs')
         self.zip_dir = os.path.join(self.working_dir, 'zip')
         self.running_jobs = {}
@@ -179,10 +180,12 @@ class Worker(object):
         FileTransportClient(self.master, zip_filename).send_file()
         
     def add_node(self, worker):
+        #self.ctx.add_node(worker)
         for job_info in self.running_jobs.values():
             job_info.job.add_node(worker)
             
     def remove_node(self, worker):
+        self.ctx.remove_node(worker)
         for job_info in self.running_jobs.values():
             job_info.job.remove_node(worker)
             

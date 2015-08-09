@@ -124,6 +124,27 @@ class Config(object):
     
     def __getitem__(self, name):
         return getattr(self, name)
+
+
+class ReadOnlyConfig(Config):
+
+    __inited = False
+
+    def __init__(self, config_or_yaml_file):
+        if isinstance(config_or_yaml_file, Config):
+            super(Config, self).__init__(config_or_yaml_file)
+        else:
+            for k in dir(config_or_yaml_file):
+                if not k.startswith('_'):
+                    setattr(self, k, getattr(config_or_yaml_file, k))
+
+        self.__inited = True
+
+    def __setattr__(self, key, value):
+        if self.__inited:
+            raise AttributeError("This is a read-only config")
+        else:
+            super(ReadOnlyConfig, self).__setattr__(key, value)
     
 conf_dir = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'conf')

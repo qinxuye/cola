@@ -93,13 +93,14 @@ class JobCommand(Command):
                 ctx.kill_job(job_id)
                 self.logger.info('killed job: %s' % job_id)
         elif args.upload is not None:
-            if not os.path.exists(args.upload):
+            path = os.path.abspath(args.upload)
+            if not os.path.exists(path):
                 self.logger.error('upload path does not exist')
                 return
 
             job_id = None
             try:
-                job_id = import_job_desc(args.upload).uniq_name
+                job_id = import_job_desc(path).uniq_name
             except Exception, e:
                 self.logger.exception(e)
                 self.logger.error('uploading job description failed')
@@ -108,7 +109,7 @@ class JobCommand(Command):
             new_upload_dir = os.path.join(tempfile.gettempdir(), job_id)
             if os.path.exists(new_upload_dir):
                 shutil.rmtree(new_upload_dir)
-            shutil.copytree(args.upload, new_upload_dir)
+            shutil.copytree(path, new_upload_dir)
 
             temp_filename = os.path.join(tempfile.gettempdir(), job_id+'.zip')
             ZipHandler.compress(temp_filename, new_upload_dir, type_filters=('pyc', ))

@@ -30,17 +30,23 @@ class Stage(object):
     Used for master to control the workers and will not move to the next stage
     until this one has been finished
     '''
-    def __init__(self, workers, func, prefix=None, app_name=None):
+    def __init__(self, workers, func, prefix=None, app_name=None, logger=None):
         self.workers = workers
         self.func = func
         self.prefix = get_rpc_prefix(app_name, prefix)
         self.remote_func = self.prefix + func
+        self.logger = logger
         
     def barrier(self, parallel, *args):
         results = [False] * len(self.workers)
 
         def _call(i, worker):
-            result = client_call(worker, self.remote_func, *args)
+            try:
+                result = client_call(worker, self.remote_func, *args)
+            except Exception, e:
+                if self.logger:
+                    self.logger.error(e)
+                result = False
             if isinstance(result, bool):
                 results[i] = result
             else:

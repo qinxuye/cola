@@ -247,6 +247,9 @@ class Master(object):
                         
     def _unzip(self, job_name):
         zip_file = os.path.join(self.zip_dir, job_name+'.zip')
+        job_path = os.path.join(self.job_dir, job_name)
+        if os.path.exists(job_path):
+            shutil.rmtree(job_path)
         if os.path.exists(zip_file):
             ZipHandler.uncompress(zip_file, self.job_dir)
             

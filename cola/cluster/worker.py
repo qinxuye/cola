@@ -23,6 +23,7 @@ Created on 2014-6-8
 import os
 import threading
 import socket
+import shutil
 
 from cola.core.utils import import_job_desc, Clock, pack_local_job_error
 from cola.core.rpc import FileTransportServer, client_call, FileTransportClient
@@ -97,6 +98,9 @@ class Worker(object):
         
     def _unzip(self, job_name):
         zip_file = os.path.join(self.zip_dir, job_name+'.zip')
+        job_path = os.path.join(self.job_dir, job_name)
+        if os.path.exists(job_path):
+            shutil.rmtree(job_path)
         if os.path.exists(zip_file):
             ZipHandler.uncompress(zip_file, self.job_dir)
         

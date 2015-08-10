@@ -180,7 +180,7 @@ class Worker(object):
         FileTransportClient(self.master, zip_filename).send_file()
         
     def add_node(self, worker):
-        #self.ctx.add_node(worker)
+        self.ctx.add_node(worker)
         for job_info in self.running_jobs.values():
             job_info.job.add_node(worker)
             

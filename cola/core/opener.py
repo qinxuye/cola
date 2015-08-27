@@ -156,8 +156,10 @@ class MechanizeOpener(Opener):
         return self.browser
 
     def read(self):
-        return self.content if hasattr(self, 'content') \
-                               else self.browser.response().read()
+        if hasattr(self, 'content'):
+            return self.content
+        elif self.browser.response() is not None:
+            return self.browser.response().read()
     
     def close(self):
         resp = self.browser.response()

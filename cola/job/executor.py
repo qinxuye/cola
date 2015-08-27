@@ -467,7 +467,6 @@ class BundleExecutor(Executor):
         self.counter_client.local_inc(self.ip, self.id_, 
                                       'error_urls', 1)
         self.counter_client.global_inc('error_urls', 1)
-        
 
     def _handle_error(self, bundle, url, e, pack=True):
         # pause clock

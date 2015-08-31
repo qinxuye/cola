@@ -29,7 +29,7 @@ from threading import Lock
 
 from cola.core.parsers import Parser
 from cola.core.utils import urldecode, beautiful_soup
-from cola.core.errors import DependencyNotInstalledError
+from cola.core.errors import DependencyNotInstalledError, FetchBannedError
 from cola.core.logs import get_logger
 
 from login import WeiboLoginFailure
@@ -112,8 +112,11 @@ class MicroBlogParser(WeiboParser):
         params['count'] = count
         params['page'] = page
         params['pre_page'] = pre_page
-        
-        data = json.loads(br.response().read())['data']
+
+        try:
+            data = json.loads(br.response().read())['data']
+        except (ValueError, KeyError):
+            raise FetchBannedError('fetch banned by weibo server')
         soup = beautiful_soup(data)
         finished = False
         
@@ -274,13 +277,19 @@ class ForwardCommentLikeParser(WeiboParser):
         
         url = url or self.url
         br = self.opener.browse_open(url)
-        jsn = json.loads(br.response().read())
+        try:
+            jsn = json.loads(br.response().read())
+        except ValueError:
+            raise FetchBannedError('fetch banned by weibo server')
 
 #         self.logger.debug('load %s finish' % url)
-        
-        soup = beautiful_soup(jsn['data']['html'])
-        current_page = jsn['data']['page']['pagenum']
-        n_pages = jsn['data']['page']['totalpage']
+
+        try:
+            soup = beautiful_soup(jsn['data']['html'])
+            current_page = jsn['data']['page']['pagenum']
+            n_pages = jsn['data']['page']['totalpage']
+        except KeyError:
+            raise FetchBannedError('fetch banned by weibo server')
         
         if not self.check(url, br):
             return
@@ -624,9 +633,11 @@ class UserFriendParser(WeiboParser):
         decodes = urldecode(url)
         is_follow = True
         is_new_mode = False
+        is_banned = True
         for script in soup.find_all('script'):
             text = script.text
             if text.startswith('FM.view'):
+                if is_banned: is_banned = False
                 text = text.strip().replace(';', '').replace('FM.view(', '')[:-1]
                 data =  json.loads(text)
                 domid = data['domid']
@@ -637,13 +648,17 @@ class UserFriendParser(WeiboParser):
                     is_follow = False
                 is_new_mode = True
             elif 'STK' in text:
+                if is_banned: is_banned = False
                 text = text.replace('STK && STK.pageletM && STK.pageletM.view(', '')[:-1]
                 data = json.loads(text)
                 if data['pid'] == 'pl_relation_hisFollow' or \
                     data['pid'] == 'pl_relation_hisFans':
                     html = beautiful_soup(data['html'])
                 if data['pid'] == 'pl_relation_hisFans':
-                    is_follow = False    
+                    is_follow = False
+
+        if is_banned:
+            raise FetchBannedError('fetch banned by weibo server')
 
         ul = None
         try:

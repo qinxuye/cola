@@ -52,7 +52,8 @@ class JobRunning(Exception): pass
 
 class JobDescription(object):
     def __init__(self, name, url_patterns, opener_cls, user_conf, starts, 
-                 unit_cls=None, login_hook=None, error_handler=None, **kw):
+                 unit_cls=None, login_hook=None, error_handler=None,
+                 finish_callback=None, **kw):
         self.name = name
         if not JOB_NAME_RE.match(name):
             raise ConfigurationError('Job name can only contain alphabet, number and space.')
@@ -65,6 +66,7 @@ class JobDescription(object):
         self.starts = starts
         self.login_hook = login_hook
         self.error_handler = error_handler
+        self.finish_callback = finish_callback
         
         self.settings = Settings(user_conf=user_conf, **kw)
         self.unit_cls = unit_cls or \
@@ -285,6 +287,8 @@ class Job(object):
         
         self.stopped.set()
         self.wait_for_stop()
+        if self.job_desc.finish_callback:
+            self.job_desc.finish_callback()
         
     def clear_running(self):
         if 'main' not in multiprocessing.current_process().name.lower():

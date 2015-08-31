@@ -288,7 +288,10 @@ class Job(object):
         self.stopped.set()
         self.wait_for_stop()
         if self.job_desc.finish_callback:
-            self.job_desc.finish_callback()
+            try:
+                self.job_desc.finish_callback()
+            except Exception, e:
+                self.logger.error(e)
         
     def clear_running(self):
         if 'main' not in multiprocessing.current_process().name.lower():

@@ -260,7 +260,7 @@ class Context(object):
             
         if self.is_local_mode:
             self._run_local_job(job_path, overwrite=overwrite, 
-                                rpc_server=rpc_server)
+                                rpc_server=rpc_server, settings=settings)
         else:
             job_name = import_job_desc(job_path).uniq_name
             

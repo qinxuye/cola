@@ -142,8 +142,8 @@ class Executor(object):
                             self.handle_banned_by_proxy = True
                             self.opener.add_proxy(h.addr, 
                                                   proxy_type=proxy_type,
-                                                  user=h.user,
-                                                  password=h.password)
+                                                  user=h.user if h.has('user') else None,
+                                                  password=h.password if h.has('password') else None)
                         self.banned_handlers.append(proxy_handler)
                     elif h.action == 'clear_proxy':
                         if hasattr(self.opener, 'remove_proxy'):

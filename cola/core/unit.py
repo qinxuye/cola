@@ -40,6 +40,14 @@ class Url(Unit):
         return self.url
     
     def __eq__(self, url):
+        if url is None:
+            return False
+        if isinstance(url, unicode):
+            url = url.encode('utf-8')
+        if isinstance(url, str):
+            return self.url == url
+        if not isinstance(url, Url):
+            return False
         return self.url == url.url
 
 

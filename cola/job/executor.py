@@ -137,7 +137,7 @@ class Executor(object):
                     elif h.action == 'proxy':
                         if not h.has('addr') or not hasattr(self.opener, 'add_proxy'):
                             continue
-                        proxy_type = h.type or 'all'
+                        proxy_type = h.type if h.has('type') else 'all'
                         def proxy_handler():
                             self.handle_banned_by_proxy = True
                             self.opener.add_proxy(h.addr, 

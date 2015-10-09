@@ -125,8 +125,7 @@ class Context(object):
                                       'root': self.working_dir,
                                       'is_local': self.is_local_mode, 
                                       'master_ip': self.master_ip,
-                                      'master_addr': self.master_addr,
-                                      'job_desc' : {}
+                                      'master_addr': self.master_addr
                                       })
         self.logger = get_logger('cola_context')
         
@@ -180,14 +179,15 @@ class Context(object):
         return job_name, working_dir
 
     def _clear_job_desc(self, job_name):
-        if job_name in self.env['job_desc']:
-            del self.env['job_desc'][job_name]
+        key = 'job_desc_%s' % job_name
+        if key in self.env['job_desc']:
+            del self.env[key]
         
     def _run_local_job(self, job_path, overwrite=False, rpc_server=None, settings=None):
         job_desc = import_job_desc(job_path)
         if settings is not None: job_desc.update_settings(settings)
         base_name = job_desc.uniq_name
-        self.env['job_desc'][base_name] = job_desc
+        self.env['job_desc_%s' % base_name] = job_desc
 
         addr_dirname = self.addr.replace('.', '_').replace(':', '_')
         working_dir = os.path.join(self.working_dir, 'worker', addr_dirname)

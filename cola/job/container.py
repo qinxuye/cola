@@ -43,7 +43,7 @@ class Container(object):
         self.mq = mq
         self.env = env
         self.job_name = job_name
-        self.job_desc = env['job_desc'].get(job_name) or \
+        self.job_desc = env.get('job_desc_%s' % job_name) or \
                         import_job_desc(job_path)
         
         self.counter_server = counter_server

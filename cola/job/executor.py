@@ -312,7 +312,7 @@ class UrlExecutor(Executor):
         res = parser_cls(self.opener, url, 
                          logger=self.logger, 
                          counter=ExecutorCounter(self),
-                         settings=ReadOnlySettings(self.settings)
+                         settings=ReadOnlySettings(self.settings),
                          **options).parse()
         return list(res)
     

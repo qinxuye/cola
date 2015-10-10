@@ -144,7 +144,7 @@ class MpMessageQueueClient(object):
 
     def __init__(self, conn):
         self.conn = conn
-        self.lock = threading.Lock()
+        self.lock = multiprocessing.Lock()
 
     @lock
     def put(self, objs, flush=False):

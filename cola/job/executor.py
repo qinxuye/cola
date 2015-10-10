@@ -32,6 +32,7 @@ from cola.core.errors import ConfigurationError, LoginFailure, \
                                 ServerError, NetworkError, FetchBannedError, \
                                 DependencyNotInstalledError
 from cola.core.utils import Clock, get_ip
+from cola.settings import ReadOnlySettings
 
 try:
     from collections import OrderedDict
@@ -310,7 +311,8 @@ class UrlExecutor(Executor):
             
         res = parser_cls(self.opener, url, 
                          logger=self.logger, 
-                         counter=ExecutorCounter(self), 
+                         counter=ExecutorCounter(self),
+                         settings=ReadOnlySettings(self.settings)
                          **options).parse()
         return list(res)
     
@@ -439,6 +441,7 @@ class BundleExecutor(Executor):
             
         res = parser_cls(self.opener, url, bundle=bundle,
                          logger=self.logger, counter=ExecutorCounter(self),
+                         settings=ReadOnlySettings(self.settings),
                          **options).parse()
         if isinstance(res, tuple):
             return res

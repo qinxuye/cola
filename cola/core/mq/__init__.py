@@ -129,6 +129,14 @@ class MessageQueue(MessageQueueNodeProxy):
         [agent.close() for agent in self.agents]
 
 
+def lock(f):
+    def _inner(self, *args, **kwargs):
+        with self.lock:
+            return f(self, *args, **kwargs)
+
+    return _inner
+
+
 class MpMessageQueueClient(object):
     """
     Client of message queue for the multi-processing call
@@ -136,23 +144,29 @@ class MpMessageQueueClient(object):
 
     def __init__(self, conn):
         self.conn = conn
-        
+        self.lock = threading.Lock()
+
+    @lock
     def put(self, objs, flush=False):
         self.conn.send((PUT, (objs, flush)))
         self.conn.recv()
-        
+
+    @lock
     def put_inc(self, objs):
         self.conn.send((PUT_INC, objs))
         self.conn.recv()
-        
+
+    @lock
     def get(self, size=1, priority=0):
         self.conn.send((GET, (size, priority)))
         return self.conn.recv()
-    
+
+    @lock
     def get_inc(self, size=1):
         self.conn.send((GET_INC, size))
         return self.conn.recv()
-    
+
+    @lock
     def exist(self, obj):
         self.conn.send((EXIST, str(obj)))
         return self.conn.recv()

@@ -26,6 +26,7 @@ import multiprocessing
 import threading
 import signal
 import shutil
+import sys
 
 from cola.core.config import Config
 from cola.core.utils import get_ip, import_job_desc, Clock
@@ -180,7 +181,7 @@ class Context(object):
 
     def _clear_job_desc(self, job_name):
         key = 'job_desc_%s' % job_name
-        if key in self.env['job_desc']:
+        if key in self.env:
             del self.env[key]
         
     def _run_local_job(self, job_path, overwrite=False, rpc_server=None, settings=None):

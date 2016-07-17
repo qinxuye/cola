@@ -37,11 +37,14 @@ class WorkerCommand(Command):
                                         help='master connected to(in the former of `ip:port` or `ip`)')
         self.worker_parser.add_argument('-s', '--start', metavar='worker address', nargs='?', const=ip,
                                         help='local worker connected to(in the former of `ip:port` or `ip`')
+        self.worker_parser.add_argument('-w', '--working', metavar='working dir', nargs='?',
+                                        help='worker working dir')
         self.worker_parser.set_defaults(func=self.run)
         
     def run(self, args):
         if args.start is not None and args.master is not None:
-            ctx = Context(master_addr=args.master, ip=args.start)
+            ctx = Context(master_addr=args.master, ip=args.start,
+                          working_dir=args.working)
             ctx.start_worker()
             self.logger.info('start worker at: %s' % ctx.worker_addr)
         else:

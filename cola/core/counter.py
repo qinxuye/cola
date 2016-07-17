@@ -22,7 +22,15 @@ Created on 2014-5-2
 
 import threading
 
+from cola.core.utils import iterable
+
 class Aggregator(object):
+    """
+    Aggregator which provide three abstract functions,
+    first is to create a ``combiner`` by given a value,
+    second is to merge two combiners,
+    the last one is to merge value to a given combiner.
+    """
     def create_combiner(self, val):
         raise NotImplementedError
     
@@ -31,18 +39,46 @@ class Aggregator(object):
     
     def merge_val(self, combiner, val):
         raise NotImplementedError
-    
+
+
 class AddAggregator(Aggregator):
+    """
+    Just adding values.
+
+    >>> agg = AddAggregator()
+    >>> agg.create_combiner(0)
+    0
+    >>> agg.merge_combiner(0, 5)
+    5
+    >>> agg.merge_val(0, 5)
+    5
+    >>> agg.merge_val('0', '5')
+    '05'
+    """
     def create_combiner(self, val):
         return val
     
     def merge_combiner(self, combiner1, combiner2):
-        return combiner1 + combiner2
+        combiner1 += combiner2
+        return combiner1
     
     def merge_val(self, combiner, val):
-        return combiner + val
-    
+        combiner += val
+        return combiner
+
+
 class MergeAggregator(Aggregator):
+    """
+    Each combiner is a ``list``.
+
+    >>> agg = MergeAggregator()
+    >>> agg.create_combiner(0)
+    [0]
+    >>> agg.merge_combiner([0], [5])
+    [0, 5]
+    >>> agg.merge_val([0], 5)
+    [0, 5]
+    """
     def create_combiner(self, val):
         return [val, ]
     
@@ -53,9 +89,32 @@ class MergeAggregator(Aggregator):
     def merge_val(self, combiner, val):
         combiner.append(val)
         return combiner
-    
+
+
 class UniqAggregator(Aggregator):
+    """
+    Each combiner is a ``set``.
+
+    >>> agg1 = agg.create_combiner(0)
+    >>> agg1
+    set([0])
+    >>> agg2 = agg.create_combiner([0, 5])
+    >>> agg2
+    set([0, 5])
+    >>> agg.merge_combiner(agg1, agg2)
+    set([0, 5])
+    >>> agg1
+    set([0, 5])
+    >>> agg2
+    set([0, 5])
+    >>> agg.merge_val(agg1, 10)
+    set([0, 10, 5])
+    >>> agg1
+    set([0, 10, 5])
+    """
     def create_combiner(self, val):
+        if not iterable(val):
+            val = [val]
         return set(val)
     
     def merge_combiner(self, combiner1, combiner2):
@@ -65,18 +124,27 @@ class UniqAggregator(Aggregator):
     def merge_val(self, combiner, val):
         combiner.add(val)
         return combiner
-    
+
+
 class OverwriteAggregator(Aggregator):
     def create_combiner(self, val):
         return val
     
     def merge_combiner(self, combiner1, combiner2):
-        return combiner2
+        combiner1 = combiner2
+        return combiner1
     
     def merge_val(self, combiner, val):
-        return val
+        combiner = val
+        return combiner
+
 
 class Counter(object):
+    """
+    A counter can have several groups, each group is a dict.
+    Besides, an instance of :class:`Aggregator` will decide
+    how each item in a group to aggregate.
+    """
     def __init__(self, agg=AddAggregator(), container=None):
         self.container = container if container is not None else dict()
         self.agg = agg

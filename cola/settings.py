@@ -52,3 +52,13 @@ class Settings(object):
         for k in self.values:
             if not k.startswith('_'):
                 setattr(self, k, getattr(self.values, k))
+
+
+class ReadOnlySettings(object):
+    __slots__ = ('_settings', )
+
+    def __init__(self, settings):
+        self._settings = settings
+
+    def __getattr__(self, item):
+        return getattr(self._settings, item)

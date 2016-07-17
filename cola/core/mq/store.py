@@ -49,10 +49,42 @@ READ_ENTRANCE, WRITE_ENTRANCE = range(2)
 
 MARSHAL, PICKLE = 'm', 'p'
 
+
 class Store(object):
+    """
+    The class is actually in charge of handling the storage
+    for objects which belong to a single priority queue or
+    the backup one.
+
+    Briefly, the storage is consist of a bunch of blocks,
+    the first and the last of the block will be mapped to the memory
+    by using the ``mmap`` mechanism.
+
+    When an object need to :func:`put` into the storage, if no block exist,
+    a file with default size 4M fulled with \x01 will be touched firstly,
+    and mmap the file to the memory, then the object will be serialized and
+    written into the block in the form of ``<length><serialization method><content>``,
+    The serialization method means either ``marshal`` or ``pickle``,
+    if ``marshal`` failed, the ``pickle`` method will be used instead.
+    Until the block is full, it will be closed and released,
+    and another block will be touched.
+
+    To the :func:`get` function, firstly will check if there is any block,
+    if yes and the block is not open, it will be mapped to the memory,
+    then read the length of the serialized object as well as the
+    serialization method, at last, the content will be read out.
+    The object will be un-serialized and returned back.
+    """
     def __init__(self, working_dir, size=STORE_FILE_SIZE, 
                  deduper=None, mkdirs=False, 
                  create_lock_file=False):
+        """
+        :param working_dir: working directory of this storage
+        :param size: single block size, 4M as default
+        :param deduper: instance of :class:`~cola.core.dedup.Deduper`
+        :param mkdirs: force to make the working directory if True
+        :param create_lock_file: create the lock file if set to True
+        """
         self.lock = threading.Lock()
         self.store_file_size = size
         self.deduper = deduper
@@ -203,6 +235,14 @@ class Store(object):
         return -1
     
     def put_one(self, obj, force=False, commit=True):
+        """
+        Put one object into the storage.
+
+        :param obj: the object to put into
+        :param force: if True, the deduper will not check if the obj has been
+               put into the entire message queue before
+        :param commit: if True, the mmap will be forced to flush
+        """
         if self.stopped: return
 #         self.init()
         
@@ -259,6 +299,12 @@ class Store(object):
         return remains
                     
     def get_one(self, commit=True):
+        """
+        Get one object from the storage.
+
+        :param commit: if set to True will force the mmap flush.
+        :return: the right object to fetch
+        """
         if self.stopped: return
         self.init()
         

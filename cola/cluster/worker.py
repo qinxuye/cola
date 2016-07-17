@@ -23,6 +23,7 @@ Created on 2014-6-8
 import os
 import threading
 import socket
+import shutil
 
 from cola.core.utils import import_job_desc, Clock, pack_local_job_error
 from cola.core.rpc import FileTransportServer, client_call, FileTransportClient
@@ -45,7 +46,8 @@ class Worker(object):
     def __init__(self, ctx):
         self.ctx = ctx
         self.master = self.ctx.master_addr
-        self.working_dir = os.path.join(self.ctx.working_dir, 'worker')
+        addr_dirname = self.ctx.addr.replace('.', '_').replace(':', '_')
+        self.working_dir = os.path.join(self.ctx.working_dir, 'worker', addr_dirname)
         self.job_dir = os.path.join(self.working_dir, 'jobs')
         self.zip_dir = os.path.join(self.working_dir, 'zip')
         self.running_jobs = {}
@@ -96,6 +98,9 @@ class Worker(object):
         
     def _unzip(self, job_name):
         zip_file = os.path.join(self.zip_dir, job_name+'.zip')
+        job_path = os.path.join(self.job_dir, job_name)
+        if os.path.exists(job_path):
+            shutil.rmtree(job_path)
         if os.path.exists(zip_file):
             ZipHandler.uncompress(zip_file, self.job_dir)
         
@@ -179,10 +184,12 @@ class Worker(object):
         FileTransportClient(self.master, zip_filename).send_file()
         
     def add_node(self, worker):
+        self.ctx.add_node(worker)
         for job_info in self.running_jobs.values():
             job_info.job.add_node(worker)
             
     def remove_node(self, worker):
+        self.ctx.remove_node(worker)
         for job_info in self.running_jobs.values():
             job_info.job.remove_node(worker)
             

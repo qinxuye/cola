@@ -44,7 +44,9 @@ class WorkerTracker(object):
         
     def register_worker(self, worker):
         if worker not in self.workers:
+            prev_workers = self.workers.keys()
             self.workers[worker] = WorkerInfo(worker)
+            return prev_workers
         else:
             self.workers[worker].update()
 

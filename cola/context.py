@@ -26,6 +26,7 @@ import multiprocessing
 import threading
 import signal
 import shutil
+import sys
 
 from cola.core.config import Config
 from cola.core.utils import get_ip, import_job_desc, Clock
@@ -85,6 +86,7 @@ class Context(object):
                 self.master_addr = '%s:%s' % (self.master_addr, main_conf.master.port)
             else:
                 self.master_ip = self.master_addr.split(':', 1)[0]
+            self.master_port = int(self.master_addr.split(':', 1)[1])
         
         self.working_dir = working_dir
         if self.working_dir is None:
@@ -101,27 +103,58 @@ class Context(object):
                 self.ip = get_ip()
                 if self.is_local_mode and not self.ip:
                     self.ip = '127.0.0.1'
+        if ':' in self.ip:
+            self.addr = self.ip
+            self.ip = self.ip.split(':', 1)[0]
+        else:
+            self.addr = '%s:%s' % (self.ip, main_conf.worker.port)
+        self.port = int(self.addr.split(':', 1)[1])
         if self.master_addr is None: self.master_addr = '%s:%s' % (self.ip, main_conf.master.port)
-        self.worker_addr = '%s:%s' % (self.ip, main_conf.worker.port)
+        self.worker_addr = self.addr
         
         self.ips = ips if ips is not None else []
         if not self.ips:
             self.ips.append(self.ip)
         self.addrs = [self.fix_addr(_ip) for _ip in self.ips]
+        self.ips = [self.fix_ip(_ip) for _ip in self.ips]
             
         self.manager = ContextManager()
         self.manager.start(manager_init)
-        self.env = self.manager.dict({'ip': self.ip, 
+        self.env = self.manager.dict({'ip': self.ip,
+                                      'addr': self.addr,
+                                      'port': self.port,
                                       'root': self.working_dir,
                                       'is_local': self.is_local_mode, 
                                       'master_ip': self.master_ip,
-                                      'job_desc' : {}
+                                      'master_addr': self.master_addr
                                       })
         self.logger = get_logger('cola_context')
         
         self.master_rpc_server = None
         self.worker_rpc_server = None
-        
+
+    def add_node(self, ip_or_addr):
+        if ':' not in ip_or_addr:
+            if ip_or_addr in self.ips:
+                return
+            self.ips.append(ip_or_addr)
+            self.addrs.append(self.fix_addr(ip_or_addr))
+        else:
+            if ip_or_addr in self.addrs:
+                return
+            self.addrs.append(ip_or_addr)
+            self.ips.append(self.fix_ip(ip_or_addr))
+
+    def remove_node(self, ip_or_addr):
+        if ':' not in ip_or_addr:
+            if ip_or_addr in self.ips:
+                self.ips.remove(ip_or_addr)
+                self.addrs.remove(self.fix_addr(ip_or_addr))
+        else:
+            if ip_or_addr in self.addrs:
+                self.addrs.remove(ip_or_addr)
+                self.addrs.remove(self.fix_ip(ip_or_addr))
+
     def get_cola_dir(self):
         return os.path.dirname(os.path.abspath(__file__))
         
@@ -145,14 +178,20 @@ class Context(object):
         if clear or not overwrite:
             return src_job_name, src_working_dir
         return job_name, working_dir
+
+    def _clear_job_desc(self, job_name):
+        key = 'job_desc_%s' % job_name
+        if key in self.env:
+            del self.env[key]
         
     def _run_local_job(self, job_path, overwrite=False, rpc_server=None, settings=None):
         job_desc = import_job_desc(job_path)
         if settings is not None: job_desc.update_settings(settings)
         base_name = job_desc.uniq_name
-        self.env['job_desc'][base_name] = job_desc
-        
-        working_dir = os.path.join(self.working_dir, 'worker')
+        self.env['job_desc_%s' % base_name] = job_desc
+
+        addr_dirname = self.addr.replace('.', '_').replace(':', '_')
+        working_dir = os.path.join(self.working_dir, 'worker', addr_dirname)
         clear = job_desc.settings.job.clear
         job_name, working_dir = self._get_name_and_dir(
             working_dir, base_name, overwrite=overwrite, clear=clear)
@@ -218,11 +257,11 @@ class Context(object):
     def run_job(self, job_path, overwrite=False, init_rpc=False, settings=None):
         rpc_server = None
         if init_rpc:
-            rpc_server = ThreadedColaRPCServer((self.ip, main_conf.worker.port))
+            rpc_server = ThreadedColaRPCServer((self.ip, self.port))
             
         if self.is_local_mode:
             self._run_local_job(job_path, overwrite=overwrite, 
-                                rpc_server=rpc_server)
+                                rpc_server=rpc_server, settings=settings)
         else:
             job_name = import_job_desc(job_path).uniq_name
             
@@ -248,7 +287,7 @@ class Context(object):
         
         if self.master_rpc_server is None:
             self.master_rpc_server = ThreadedColaRPCServer((self.ip, 
-                                                            main_conf.master.port))
+                                                            self.master_port))
 
         self.master = Master(self)
         self.master.run()
@@ -258,8 +297,7 @@ class Context(object):
     def start_worker(self):
         if self.worker_rpc_server is None:
             self.worker_rpc_server = ThreadedColaRPCServer((self.ip, 
-                                                            main_conf.worker.port))
-            
+                                                            self.port))
         self.worker = Worker(self)
         self.worker.run()
         

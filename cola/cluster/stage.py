@@ -30,27 +30,40 @@ class Stage(object):
     Used for master to control the workers and will not move to the next stage
     until this one has been finished
     '''
-    def __init__(self, workers, func, prefix=None, app_name=None):
+    def __init__(self, workers, func, prefix=None, app_name=None, logger=None):
         self.workers = workers
         self.func = func
         self.prefix = get_rpc_prefix(app_name, prefix)
         self.remote_func = self.prefix + func
+        self.logger = logger
         
     def barrier(self, parallel, *args):
-        def _call(worker):
-            client_call(worker, self.remote_func, *args)
+        results = [False] * len(self.workers)
+
+        def _call(i, worker):
+            try:
+                result = client_call(worker, self.remote_func, *args)
+            except Exception, e:
+                if self.logger:
+                    self.logger.error(e)
+                result = False
+            if isinstance(result, bool):
+                results[i] = result
+            else:
+                results[i] = True
         
         if not parallel:
-            for worker in self.workers:
-                _call(worker)
+            for i, worker in enumerate(self.workers):
+                _call(i, worker)
         else:
             threads = []
-            for worker in self.workers:
-                t = threading.Thread(target=_call, args=(worker, ))
+            for i, worker in enumerate(self.workers):
+                t = threading.Thread(target=_call, args=(i, worker, ))
                 t.setDaemon(True)
                 threads.append(t)
             for t in threads:
                 t.start()               
             for t in threads:
                 t.join()
-                
+
+        return all(results)

@@ -33,17 +33,20 @@ class MasterCommand(Command):
         ip = get_ip()
         
         self.master_parser = parser.add_parser('master', help='master commands')
-        self.master_parser.add_argument('-s', '--start', metavar='start master', nargs='?', const=ip,
+        self.master_parser.add_argument('-w', '--working', metavar='working dir', nargs='?',
+                                        help='master working dir')
+        self.master_parser.add_argument('-s', '--start', metavar='master address', nargs='?', const=ip,
                                         help='master address(in the former of `ip:port` or `ip`)')
-        self.master_parser.add_argument('-k', '--kill', metavar='kill master', nargs='?', const=ip,
+        self.master_parser.add_argument('-k', '--kill', metavar='master address', nargs='?', const=ip,
                                         help='master to kill(in the former of `ip:port` or `ip`)')
-        self.master_parser.add_argument('-l', '--list', metavar='list workers', nargs='?', const=ip,
+        self.master_parser.add_argument('-l', '--list', metavar='master address', nargs='?', const=ip,
                                         help='list workers(in the former of `ip:port` or `ip`)')
         self.master_parser.set_defaults(func=self.run)
     
     def run(self, args):
         if args.start is not None:
-            ctx = Context(is_master=True, master_addr=args.start)
+            ctx = Context(is_master=True, master_addr=args.start,
+                          working_dir=args.working)
             ctx.start_master()
             self.logger.info('start master at: %s' % ctx.master_addr)
         elif args.kill is not None:

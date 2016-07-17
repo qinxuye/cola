@@ -25,17 +25,49 @@ import threading
 
 from cola.core.mq.node import MessageQueueNodeProxy
 from cola.core.mq.client import MessageQueueClient
-from cola.core.utils import get_rpc_prefix, \
-                            pickle_connection, unpickle_connection
 
-PUT, PUT_INC, GET, GET_INC, EXIST = range(5)
+PUT, PUT_INC, GET, GET_INC, EXIST = range(5) # 5 operations now Cola MQ supports
 
 MessageQueueClient = MessageQueueClient
 
+
 class MessageQueue(MessageQueueNodeProxy):
+    """
+    The actual API for Cola message queue.
+
+    The message queue uses :class:`~cola.core.mq.hash_ring.HashRing`
+    to provide the ability for data distribution, hence when a
+    message queue is initialized, a single message queue node should
+    be aware of the the entire cluster.
+
+    Basically, the Cola message queue may contain multiple priorities
+    as well as several backup copies according to the user's setting.
+    Besides, the incremental queue is also available.
+
+    Actually, this class is a wrapper for
+    :class:`~cola.core.mq.node.MessageQueueNodeProxy`
+    to provide the ability for cross-process call.
+    Five operations are supported include ``PUT``, ``PUT_INC``,
+    ``GET``, ``GET_INC`` and ``EXIST``.
+    """
+
     def __init__(self, working_dir, rpc_server, addr, addrs, 
                  app_name=None, copies=1, n_priorities=3,
                  deduper=None):
+        """
+        Initialization method for the Cola message queue.
+
+        :param working_dir: data for the mq should be serialized into this dir
+        :param rpc_server: can be null when running under local mode
+        :param addr: this worker address, as the ``ip:port``
+        :param addrs: the whole worker addresses of the cluster
+        :param app_name: ``optional`` if the mq used for some app
+        :param copies: default as 1, an object will be delivered to the node
+               on the hash ring if copy is 1
+        :param n_priorities: the mq will include multiple priorities
+        :param deduper: ``optional`` :class:`~cola.core.dedup.Deduper` instance
+               for removing the duplication
+        """
         super(MessageQueue, self).__init__(working_dir, rpc_server, addr, addrs,
                                            copies=copies, n_priorities=n_priorities,
                                            deduper=deduper, app_name=app_name)
@@ -95,27 +127,46 @@ class MessageQueue(MessageQueueNodeProxy):
         self.stopped.set()
         self._join()
         [agent.close() for agent in self.agents]
-        
+
+
+def lock(f):
+    def _inner(self, *args, **kwargs):
+        with self.lock:
+            return f(self, *args, **kwargs)
+
+    return _inner
+
+
 class MpMessageQueueClient(object):
+    """
+    Client of message queue for the multi-processing call
+    """
+
     def __init__(self, conn):
         self.conn = conn
-        
+        self.lock = multiprocessing.Lock()
+
+    @lock
     def put(self, objs, flush=False):
         self.conn.send((PUT, (objs, flush)))
         self.conn.recv()
-        
+
+    @lock
     def put_inc(self, objs):
         self.conn.send((PUT_INC, objs))
         self.conn.recv()
-        
+
+    @lock
     def get(self, size=1, priority=0):
         self.conn.send((GET, (size, priority)))
         return self.conn.recv()
-    
+
+    @lock
     def get_inc(self, size=1):
         self.conn.send((GET_INC, size))
         return self.conn.recv()
-    
+
+    @lock
     def exist(self, obj):
         self.conn.send((EXIST, str(obj)))
         return self.conn.recv()

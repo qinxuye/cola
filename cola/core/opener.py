@@ -130,6 +130,7 @@ class MechanizeOpener(Opener):
         # check if gzip by
         # br.response().info().dict.get('content-encoding') == 'gzip'
         # experimently add `self.br.set_handle_gzip(True)` to handle
+        self._clear_content()
         if timeout is None:
             timeout = self._default_timout
         self.content = self.browser.open(url, data=data, timeout=timeout).read()
@@ -152,14 +153,23 @@ class MechanizeOpener(Opener):
     def browse_open(self, url, data=None, timeout=None):
         if timeout is None:
             timeout = self._default_timout
+        self._clear_content()
         self.browser.open(url, data=data, timeout=timeout)
         return self.browser
 
     def read(self):
-        return self.content if hasattr(self, 'content') \
-                               else self.browser.response().read()
-    
+        if hasattr(self, 'content'):
+            return self.content
+        elif self.browser.response() is not None:
+            self.content = self.browser.response().read()
+            return self.content
+
+    def _clear_content(self):
+        if hasattr(self, 'content'):
+            del self.content
+
     def close(self):
+        self._clear_content()
         resp = self.browser.response()
         if resp is not None:
             resp.close()

@@ -32,6 +32,9 @@ from cola.core.errors import DependencyNotInstalledError
 from cola.core.config import Config
 from cola.job import JobDescription
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 try:
     from bs4 import BeautifulSoup
 except ImportError:

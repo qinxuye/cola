@@ -76,6 +76,10 @@ class HashableElement():
         return getattr(self.node, name)
 
 class Extractor(object):
+    '''
+    Class restructured from ``readability``
+    '''
+
     TEXT_LENGTH_THRESHOLD = 25
     RETRY_LENGTH = 250
     

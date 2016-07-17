@@ -32,6 +32,7 @@ from cola.core.errors import ConfigurationError, LoginFailure, \
                                 ServerError, NetworkError, FetchBannedError, \
                                 DependencyNotInstalledError
 from cola.core.utils import Clock, get_ip
+from cola.settings import ReadOnlySettings
 
 try:
     from collections import OrderedDict
@@ -137,13 +138,13 @@ class Executor(object):
                     elif h.action == 'proxy':
                         if not h.has('addr') or not hasattr(self.opener, 'add_proxy'):
                             continue
-                        proxy_type = h.type or 'all'
+                        proxy_type = h.type if h.has('type') else 'all'
                         def proxy_handler():
                             self.handle_banned_by_proxy = True
                             self.opener.add_proxy(h.addr, 
                                                   proxy_type=proxy_type,
-                                                  user=h.user,
-                                                  password=h.password)
+                                                  user=h.user if h.has('user') else None,
+                                                  password=h.password if h.has('password') else None)
                         self.banned_handlers.append(proxy_handler)
                     elif h.action == 'clear_proxy':
                         if hasattr(self.opener, 'remove_proxy'):
@@ -169,7 +170,7 @@ class Executor(object):
     def _login(self, shuffle=False):
         if self.job_desc.login_hook is not None:
             if 'login' not in self.settings.job or \
-                not isinstance(self.settings.job.login, list):
+                    not isinstance(self.settings.job.login, list):
                 raise ConfigurationError('If login_hook set, config files must contains `login`')
             
             kws = self.settings.job.login
@@ -251,7 +252,7 @@ class Executor(object):
     def _handle_proxy_network_error(self, e):
         if self.handle_banned_by_proxy and \
             isinstance(e, NetworkError) and \
-            hasattr(self.opener, 'remove_proxy'):
+                hasattr(self.opener, 'remove_proxy'):
             self.opener.remove_proxy()
             self.handle_banned_by_proxy = False
         
@@ -323,7 +324,8 @@ class UrlExecutor(Executor):
             
         res = parser_cls(self.opener, url, 
                          logger=self.logger, 
-                         counter=ExecutorCounter(self), 
+                         counter=ExecutorCounter(self),
+                         settings=ReadOnlySettings(self.settings),
                          **options).parse()
         return list(res)
     
@@ -451,7 +453,8 @@ class BundleExecutor(Executor):
             del self.opener.content
             
         res = parser_cls(self.opener, url, bundle=bundle,
-                         logger=self.logger, counter=self.counter_client, 
+                         logger=self.logger, counter=ExecutorCounter(self),
+                         settings=ReadOnlySettings(self.settings),
                          **options).parse()
         if isinstance(res, tuple):
             return res
@@ -480,7 +483,6 @@ class BundleExecutor(Executor):
         self.counter_client.local_inc(self.ip, self.id_, 
                                       'error_urls', 1)
         self.counter_client.global_inc('error_urls', 1)
-        
 
     def _handle_error(self, bundle, url, e, pack=True):
         # pause clock

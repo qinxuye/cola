@@ -24,13 +24,12 @@ import time
 import json
 import urllib
 import re
-from urllib2 import URLError
 from datetime import datetime, timedelta
 from threading import Lock
 
 from cola.core.parsers import Parser
 from cola.core.utils import urldecode, beautiful_soup
-from cola.core.errors import DependencyNotInstalledError
+from cola.core.errors import DependencyNotInstalledError, FetchBannedError
 from cola.core.logs import get_logger
 
 from login import WeiboLoginFailure
@@ -113,8 +112,11 @@ class MicroBlogParser(WeiboParser):
         params['count'] = count
         params['page'] = page
         params['pre_page'] = pre_page
-        
-        data = json.loads(br.response().read())['data']
+
+        try:
+            data = json.loads(br.response().read())['data']
+        except (ValueError, KeyError):
+            raise FetchBannedError('fetch banned by weibo server')
         soup = beautiful_soup(data)
         finished = False
         
@@ -220,7 +222,10 @@ class MicroBlogParser(WeiboParser):
         else:
             del params['max_id']
 #         self.logger.debug('parse %s finish' % url)
-                
+
+        # counter add one for the processed weibo list url
+        self.counter.inc('processed_weibo_list_page', 1)
+
         # if not has next page
         if len(divs) == 0 or finished:
             weibo_user = self.get_weibo_user()
@@ -232,7 +237,7 @@ class MicroBlogParser(WeiboParser):
             weibo_user.last_update = self.bundle.last_update
             weibo_user.save()
             return
-        
+
         yield '%s?%s'%(url.split('?')[0], urllib.urlencode(params))
     
 class ForwardCommentLikeParser(WeiboParser):
@@ -272,13 +277,19 @@ class ForwardCommentLikeParser(WeiboParser):
         
         url = url or self.url
         br = self.opener.browse_open(url)
-        jsn = json.loads(br.response().read())
+        try:
+            jsn = json.loads(br.response().read())
+        except ValueError:
+            raise FetchBannedError('fetch banned by weibo server')
 
 #         self.logger.debug('load %s finish' % url)
-        
-        soup = beautiful_soup(jsn['data']['html'])
-        current_page = jsn['data']['page']['pagenum']
-        n_pages = jsn['data']['page']['totalpage']
+
+        try:
+            soup = beautiful_soup(jsn['data']['html'])
+            current_page = jsn['data']['page']['pagenum']
+            n_pages = jsn['data']['page']['totalpage']
+        except KeyError:
+            raise FetchBannedError('fetch banned by weibo server')
         
         if not self.check(url, br):
             return
@@ -302,8 +313,10 @@ class ForwardCommentLikeParser(WeiboParser):
             for div in dl.find_all('div'): div.extract()
             for span in dl.find_all('span'): span.extract()
             instance.content = dl.text.strip()
-        
+
+        counter_type = None
         if url.startswith('http://weibo.com/aj/comment'):
+            counter_type = 'comment'
             dls = soup.find_all('dl', mid=True)
             for dl in dls:
                 uid = dl.find('a', usercard=True)['usercard'].split("id=", 1)[1]
@@ -312,6 +325,7 @@ class ForwardCommentLikeParser(WeiboParser):
                 
                 mblog.comments.append(comment)
         elif url.startswith('http://weibo.com/aj/mblog/info'):
+            counter_type = 'forward'
             dls = soup.find_all('dl', mid=True)
             for dl in dls:
                 forward_again_a = dl.find('a', attrs={'action-type': re.compile("^(feed_list|fl)_forward$")})
@@ -321,6 +335,7 @@ class ForwardCommentLikeParser(WeiboParser):
                 
                 mblog.forwards.append(forward)
         elif url.startswith('http://weibo.com/aj/like'):
+            counter_type = 'like'
             lis = soup.find_all('li', uid=True)
             for li in lis:
                 like = Like(uid=li['uid'])
@@ -330,7 +345,11 @@ class ForwardCommentLikeParser(WeiboParser):
 
         mblog.save()
 #       self.logger.debug('parse %s finish' % url)
-        
+
+        # counter add one for the processed forward or comment or like list url
+        if counter_type is not None:
+            self.counter.inc('processed_%s_list_page' % counter_type, 1)
+
         if current_page >= n_pages:
             return
         
@@ -587,9 +606,12 @@ class UserInfoParser(WeiboParser):
             else:
                 for a in tags_div.find('span', attrs={'class': 'pt_detail'}).find_all('a'):
                     weibo_user.info.tags.append(a.text.strip())
-                
+
         weibo_user.save()
 #         self.logger.debug('parse %s finish' % url)
+
+        # counter add one for the profile url
+        self.counter.inc('processed_profile_page', 1)
     
 class UserFriendParser(WeiboParser):
     def parse(self, url=None):
@@ -611,9 +633,11 @@ class UserFriendParser(WeiboParser):
         decodes = urldecode(url)
         is_follow = True
         is_new_mode = False
+        is_banned = True
         for script in soup.find_all('script'):
             text = script.text
             if text.startswith('FM.view'):
+                if is_banned: is_banned = False
                 text = text.strip().replace(';', '').replace('FM.view(', '')[:-1]
                 data =  json.loads(text)
                 domid = data['domid']
@@ -624,13 +648,17 @@ class UserFriendParser(WeiboParser):
                     is_follow = False
                 is_new_mode = True
             elif 'STK' in text:
+                if is_banned: is_banned = False
                 text = text.replace('STK && STK.pageletM && STK.pageletM.view(', '')[:-1]
                 data = json.loads(text)
                 if data['pid'] == 'pl_relation_hisFollow' or \
                     data['pid'] == 'pl_relation_hisFans':
                     html = beautiful_soup(data['html'])
                 if data['pid'] == 'pl_relation_hisFans':
-                    is_follow = False    
+                    is_follow = False
+
+        if is_banned:
+            raise FetchBannedError('fetch banned by weibo server')
 
         ul = None
         try:
@@ -673,6 +701,10 @@ class UserFriendParser(WeiboParser):
                 
         weibo_user.save()
 #         self.logger.debug('parse %s finish' % url)
+
+        # counter add one for the friend url
+        counter_type = 'follows' if is_follow else 'fans'
+        self.counter.inc('processed_%s_list_page' % counter_type, 1)
 
         pages = html.find('div', attrs={'class': 'W_pages', 'node-type': 'pageList'})
         if pages is None:

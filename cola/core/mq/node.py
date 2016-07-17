@@ -34,7 +34,7 @@ from cola.core.utils import get_rpc_prefix
 from cola.core.mq.store import Store
 from cola.core.mq.distributor import Distributor
     
-MQ_STATUS_FILENAME = 'mq.status'
+MQ_STATUS_FILENAME = 'mq.status' # file name of message queue status
 
 PRIORITY_STORE_FN = 'store'
 BACKUP_STORE_FN = 'backup'
@@ -42,7 +42,16 @@ INCR_STORE_FN = 'inc'
 
 CACHE_SIZE = 20
 
+
 class LocalMessageQueueNode(object):
+    """
+    Message queue node which only handle local mq operations
+    can also be in charge of handling the remote call.
+    This node includes several storage such as priority storage
+    for each priority, incremental storage as well as the
+    backup storage. Each storage is an instance of
+    :class:`~cola.core.mq.store.Store`.
+    """
     def __init__(self, base_dir, rpc_server, addr, addrs,
                  copies=1, n_priorities=3, deduper=None,
                  app_name=None):
@@ -108,15 +117,23 @@ class LocalMessageQueueNode(object):
         rpc_server.register_function(node.exist, name='exist',
                                      prefix=prefix)
 
-        
     def put(self, objs, force=False, priority=0):
         self.init()
-        
+
         priority = max(min(priority, self.n_priorities-1), 0)
         priority_store = self.priority_stores[priority]
         priority_store.put(objs, force=force)
         
     def put_proxy(self, pickled_objs, force=False, priority=0):
+        """
+        The objects from remote call should be pickled to
+        avoid the serialization error.
+
+        :param pickled_objs: the pickled objects to put into mq
+        :param force: if set to True will be directly put into mq without
+               checking the duplication
+        :param priority: the priority queue to put into
+        """
         objs = pickle.loads(pickled_objs)
         self.put(objs, force=force, priority=priority)
         
@@ -134,6 +151,10 @@ class LocalMessageQueueNode(object):
                 self.put(obs, force=force, priority=priority)
                 
     def batch_put_proxy(self, pickled_objs):
+        """
+        Unlike the :func:`put`, this method will check the ``priority``
+        of a single object to decide which priority queue to put into.
+        """
         objs = pickle.loads(pickled_objs)
         self.batch_put(objs)
     
@@ -144,6 +165,16 @@ class LocalMessageQueueNode(object):
         backup_store.put(objs, force=force)
         
     def put_backup_proxy(self, addr, pickled_objs, force=False):
+        """
+        In the Cola backup mechanism, an object will not only be
+        put into a hash ring node, and also be put into the next
+        hash ring node which marked as a backup node. To the backup node,
+        it will remember the previous node's name.
+
+        :param addr: the node address to backup
+        :param pickled_objs: pickled objects
+        :param force: if True will be put into queue without checking duplication
+        """
         objs = pickle.loads(pickled_objs)
         self.put_backup(addr, objs, force=force)
         
@@ -160,6 +191,14 @@ class LocalMessageQueueNode(object):
         return priority_store.get(size=size)
     
     def get_proxy(self, size=1, priority=0):
+        """
+        Get the objects from the specific priority queue.
+
+        :param size: if size == 1 will be the right object,
+               else will be the objects list
+        :param priority:
+        :return: unpickled objects
+        """
         return pickle.dumps(self.get(size=size, priority=priority))
     
     def get_backup(self, addr, size=1):
@@ -174,6 +213,10 @@ class LocalMessageQueueNode(object):
         return self.inc_store.get(size=size)
     
     def add_node(self, addr):
+        """
+        When a new message queue node is in, firstly will add the address
+        to the known queue nodes, then a backup for this node will be created.
+        """
         if addr in self.addrs: return
         
         self.addrs.append(addr)
@@ -185,6 +228,10 @@ class LocalMessageQueueNode(object):
                                          size=512*1024, mkdirs=True)
         
     def remove_node(self, addr):
+        """
+        For the removed node, this method is for the cleaning job including
+        shutting down the backup storage for the removed node.
+        """
         if addr not in self.addrs: return
         
         self.addrs.remove(addr)
@@ -203,8 +250,23 @@ class LocalMessageQueueNode(object):
         for backup_store in self.backup_stores.values():
             backup_store.shutdown()
         self.inc_store.shutdown()
-    
+
+
 class MessageQueueNodeProxy(object):
+    """
+    This class maintains an instance of :class:`~cola.core.mq.node.LocalMessageQueueNode`,
+    and provide `PUT` and `GET` relative method.
+    In each mq operation, it will execute a local or remote call by judging the address.
+    The Remote call will actually send a RPC to the destination worker's instance which
+    execute the method provided by :class:`~cola.core.mq.node.LocalMessageQueueNode`.
+
+    Besides, this class also maintains an instance of :class:`~cola.core.mq.distributor.Distributor`
+    which holds a hash ring. To an object of `PUT` operation, the object should be distributed to
+    the destination according to the mechanism of the hash ring. Remember, a cache will be created
+    to avoid the frequent write operations which may cause high burden of a message queue node.
+    To `GET` operation, the mq will just fetch an object from the local node,
+    or request from other nodes if local one's objects are exhausted.
+    """
     def __init__(self, base_dir, rpc_server, addr, addrs,
                  copies=1, n_priorities=3, deduper=None,
                  app_name=None, logger=None):
@@ -288,11 +350,20 @@ class MessageQueueNodeProxy(object):
             client_call(addr, self.prefix+'batch_put', pickle.dumps(objs))
             
     def _remote_or_local_get(self, addr, size=1, priority=0):
+        objs = None
         if addr == self.addr_:
-            return self.mq_node.get(size=size, priority=priority)
+            objs = self.mq_node.get(size=size, priority=priority)
         else:
-            return pickle.loads(client_call(addr, self.prefix+'get', 
+            objs = pickle.loads(client_call(addr, self.prefix+'get', 
                                             size, priority))
+        
+        addr_caches = self.caches.get(addr, [])
+        if size == 1 and objs is None and len(addr_caches) > 0:
+            return addr_caches.pop(0)
+        elif size > 1 and len(objs) == 0 and len(addr_caches) > 0:
+            return addr_caches[:size]
+        
+        return objs
             
     def _remote_or_local_put_backup(self, addr, backup_addr, objs, 
                                     force=False):
@@ -305,6 +376,17 @@ class MessageQueueNodeProxy(object):
                         pickle.dumps(objs), force)
                     
     def put(self, objects, flush=False):
+        """
+        Put a bunch of objects into the mq. The objects will be distributed
+        to different mq nodes according to the instance of
+        :class:`~cola.core.mq.distributor.Distributor`.
+        There also exists a cache which will not flush out unless the parameter flush
+        is true or a single destination cache is full.
+
+        :param objects: objects to put into mq, an object is mostly the instance of
+               :class:`~cola.core.unit.Url` or :class:`~cola.core.unit.Bundle`
+        :param flush: flush out the cache all if set to true
+        """
         self.init()
         
         addrs_objs, backup_addrs_objs = \
@@ -350,6 +432,15 @@ class MessageQueueNodeProxy(object):
                         self.backup_caches[addr][backup_addr] = []
             
     def get(self, size=1, priority=0):
+        """
+        Get a bunch of objects from the message queue.
+        This method will try to fetch objects from local node as much as wish.
+        If not enough, will try to fetch from the other nodes.
+
+        :param size: the objects wish to fetch
+        :param priority: the priority queue which wants to fetch from
+        :return: the objects which to handle
+        """
         self.init()
         
         if size < 1: size = 1

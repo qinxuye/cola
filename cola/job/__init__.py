@@ -52,7 +52,8 @@ class JobRunning(Exception): pass
 
 class JobDescription(object):
     def __init__(self, name, url_patterns, opener_cls, user_conf, starts, 
-                 unit_cls=None, login_hook=None, error_handler=None, **kw):
+                 unit_cls=None, login_hook=None, error_handler=None,
+                 finish_callback=None, **kw):
         self.name = name
         if not JOB_NAME_RE.match(name):
             raise ConfigurationError('Job name can only contain alphabet, number and space.')
@@ -65,6 +66,7 @@ class JobDescription(object):
         self.starts = starts
         self.login_hook = login_hook
         self.error_handler = error_handler
+        self.finish_callback = finish_callback
         
         self.settings = Settings(user_conf=user_conf, **kw)
         self.unit_cls = unit_cls or \
@@ -118,7 +120,8 @@ def run_containers(n_containers, n_instances, working_dir, job_def_path,
     if block:
         [process.join() for process in processes]
     return processes
-        
+
+
 class Job(object):
     def __init__(self, ctx, job_def_path, job_name, 
                  job_desc=None, working_dir=None, rpc_server=None,
@@ -284,6 +287,11 @@ class Job(object):
         
         self.stopped.set()
         self.wait_for_stop()
+        if self.job_desc.finish_callback:
+            try:
+                self.job_desc.finish_callback()
+            except Exception, e:
+                self.logger.error(e)
         
     def clear_running(self):
         if 'main' not in multiprocessing.current_process().name.lower():
@@ -322,7 +330,7 @@ class Job(object):
     def get_status(self):
         if self.ctx.is_local_mode and self.status == RUNNING:
             if self.budget_server.get_status() == ALLFINISHED and \
-                self.settings.job.inc is False:
+                            self.settings.job.inc is False:
                 return FINISHED
             if all(list(self.idle_statuses)):
                 return IDLE

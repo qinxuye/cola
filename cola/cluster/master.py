@@ -188,7 +188,10 @@ class Master(object):
                                           'register_heartbeat')
         
     def register_heartbeat(self, worker):
-        self.worker_tracker.register_worker(worker)
+        need_to_add_worker_nodes = self.worker_tracker.register_worker(worker)
+        if need_to_add_worker_nodes is not None:
+            for node in need_to_add_worker_nodes:
+                client_call(node, 'add_node', worker)
         return self.worker_tracker.workers.keys()
     
     def _init_log_server(self, logger):
@@ -244,6 +247,9 @@ class Master(object):
                         
     def _unzip(self, job_name):
         zip_file = os.path.join(self.zip_dir, job_name+'.zip')
+        job_path = os.path.join(self.job_dir, job_name)
+        if os.path.exists(job_path):
+            shutil.rmtree(job_path)
         if os.path.exists(zip_file):
             ZipHandler.uncompress(zip_file, self.job_dir)
             
@@ -287,13 +293,18 @@ class Master(object):
             'entering the master prepare stage, job id: %s' % job_name)
         self.logger.debug(
             'job available workers: %s' % job_master.workers)
-        stage = Stage(job_master.workers, 'prepare')
-        stage.barrier(True, job_name)
+        stage = Stage(job_master.workers, 'prepare', logger=self.logger)
+        prepared_ok = stage.barrier(True, job_name)
+        if not prepared_ok:
+            self.logger.error("prepare for running failed")
+            return
         
         self.logger.debug(
             'entering the master run_job stage, job id: %s' % job_name)
-        stage = Stage(job_master.workers, 'run_job')
-        stage.barrier(True, job_name)
+        stage = Stage(job_master.workers, 'run_job', logger=self.logger)
+        run_ok = stage.barrier(True, job_name)
+        if not run_ok:
+            self.logger.error("run job failed, job id: %s" % job_name)
         
     def stop_job(self, job_name):
         job_master = self.job_tracker.get_job_master(job_name)

@@ -176,4 +176,3 @@ class CounterClient(object):
                 self.server.acc_merge(self.acc_counter.container)
             self.inc_counter.reset()
             self.acc_counter.reset()
-    

@@ -44,15 +44,15 @@ class JobCommand(Command):
                                      help='master connected to(in the former of `ip:port` or `ip`)')
         self.job_parser.add_argument('-l', '--list', action='store_true',
                                      help='list all jobs including <id> <name> and <status>' )
-        self.job_parser.add_argument('-k', '--kill', metavar='kill some job', nargs='?', 
+        self.job_parser.add_argument('-k', '--kill', metavar='job name', nargs='?',
                                      help='kill job by job name')
-        self.job_parser.add_argument('-u', '--upload', metavar='upload a job', nargs='?', 
+        self.job_parser.add_argument('-u', '--upload', metavar='job directory', nargs='?',
                                      help='upload a job directory to the cluster')
-        self.job_parser.add_argument('-r', '--run', metavar='run a job', nargs='?', const='U',
+        self.job_parser.add_argument('-r', '--run', metavar='job name', nargs='?', const='U',
                                      help='run a job by the job id or with the `upload` command')
-        self.job_parser.add_argument('-t', '--status', metavar='get the status of a job', nargs='?',
+        self.job_parser.add_argument('-t', '--status', metavar='job name', nargs='?',
                                      help='show the status of a job, and the counters if it\'s running')
-        self.job_parser.add_argument('-p', '--package', metavar='package a job', nargs='?',
+        self.job_parser.add_argument('-p', '--package', metavar='job_name', nargs='?',
                                      help='package the running info of a job including log and errors infos')
         self.job_parser.set_defaults(func=self.run)
 
@@ -83,7 +83,7 @@ class JobCommand(Command):
             self.logger.info('list jobs at master: %s' % ctx.master_addr)
             for job_id, info in jobs.iteritems():
                 self.logger.info(
-                    '====> job id: %s, job_name: %s, status: %s' % \
+                    '====> job id: %s, job description: %s, status: %s' % \
                     (job_id, info['name'], info['status']))
             if len(jobs) == 0:
                 self.logger.info('no jobs exist')
@@ -93,13 +93,14 @@ class JobCommand(Command):
                 ctx.kill_job(job_id)
                 self.logger.info('killed job: %s' % job_id)
         elif args.upload is not None:
-            if not os.path.exists(args.upload):
+            path = os.path.abspath(args.upload)
+            if not os.path.exists(path):
                 self.logger.error('upload path does not exist')
                 return
 
             job_id = None
             try:
-                job_id = import_job_desc(args.upload).uniq_name
+                job_id = import_job_desc(path).uniq_name
             except Exception, e:
                 self.logger.exception(e)
                 self.logger.error('uploading job description failed')
@@ -108,7 +109,7 @@ class JobCommand(Command):
             new_upload_dir = os.path.join(tempfile.gettempdir(), job_id)
             if os.path.exists(new_upload_dir):
                 shutil.rmtree(new_upload_dir)
-            shutil.copytree(args.upload, new_upload_dir)
+            shutil.copytree(path, new_upload_dir)
 
             temp_filename = os.path.join(tempfile.gettempdir(), job_id+'.zip')
             ZipHandler.compress(temp_filename, new_upload_dir, type_filters=('pyc', ))
@@ -135,7 +136,7 @@ class JobCommand(Command):
                 jobs = ctx.list_jobs()
                 info = jobs[job_id]
                 self.logger.info(
-                    '====> job id: %s, job name: %s, status: %s' % \
+                    '====> job id: %s, job description: %s, status: %s' % \
                     (job_id, info['name'], info['status']))
                 if info['status'] == 'running':
                     self.logger.info('====> counter:\n' \

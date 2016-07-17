@@ -197,6 +197,7 @@ class Executor(object):
         return True
     
     def clear_and_relogin(self):
+        self._cleanup_opener()
         self.opener = self.job_desc.opener_cls(timeout=DEFAULT_OPENER_TIMEOUT)
         self.login(random=True)
         
@@ -298,6 +299,18 @@ class Executor(object):
             self.normal_start = curr
             self.counter_client.multi_local_acc(self.ip, self.id_, **kw)
         self.normal_pages += 1
+
+    def _cleanup_opener(self):
+        if hasattr(self.opener, 'cleanup'):
+            try:
+                self.opener.cleanup()
+            except Exception as e:
+                self.logger.error('Error encountered when clean up an opener')
+                self.logger.exception(e)
+
+    def close(self):
+        self._cleanup_opener()
+
 
 class UrlExecutor(Executor):
     def __init__(self, *args, **kwargs):

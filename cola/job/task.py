@@ -243,6 +243,7 @@ class Task(object):
                     
                 curr_priority = (curr_priority+1) % self.full_priorities
         finally:
+            self.executor.close()
             self.counter_client.sync()
             self.save()
             

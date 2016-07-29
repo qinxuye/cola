@@ -254,7 +254,8 @@ class Store(object):
             if self.deduper.exist(prop):
                 return
         if len(self.legal_files) == 0:
-            self._generate_file()
+            with self.lock:
+                self._generate_file()
             
         obj_str = self._stringfy(obj)
         # If no file has enough space

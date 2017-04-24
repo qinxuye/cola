@@ -107,12 +107,12 @@ def run_containers(n_containers, n_instances, working_dir, job_def_path,
                               is_local=is_local, master_ip=master_ip, task_start_id=acc)
         if is_multi_process:
             process = multiprocessing.Process(target=container.run, 
-                                              args=(True, ))
+                                              args=(True,))
             process.start()
             processes.append(process)
         else:
             thread = threading.Thread(target=container.run, 
-                                      args=(True, ))
+                                      args=(True,))
             thread.start()
             processes.append(thread)
         acc += n_tasks
@@ -138,7 +138,7 @@ class Job(object):
         self.job_name = job_name
         self.working_dir = working_dir or os.path.join(self.ctx.working_dir, 
                                                        self.job_name)
-        self.logger = get_logger(name='cola_job'+str(time.time()))
+        self.logger = get_logger(name='cola_job' + str(time.time()))
         self.job_desc = job_desc or import_job_desc(job_def_path)
             
         self.settings = self.job_desc.settings
@@ -168,7 +168,7 @@ class Job(object):
             self.rpc_server.register_function(self.shutdown, name='shutdown',
                                               prefix=self.prefix)
             if self.ctx.is_local_mode:
-                self.rpc_server.register_function(lambda: [self.job_name, ],
+                self.rpc_server.register_function(lambda: [self.job_name,],
                                                   name='get_jobs')
         
     def init_deduper(self):
@@ -176,6 +176,8 @@ class Job(object):
         
         base = 1 if not self.is_bundle else 1000
         size = self.job_desc.settings.job.size
+        if isinstance(size,basestring):
+            size = len(self.job_desc.settings.job.starts) * 10
         capacity = UNLIMIT_BLOOM_FILTER_CAPACITY
         if size > 0:
             capacity = max(base * size * 10, capacity)
@@ -203,7 +205,7 @@ class Job(object):
         
     def _init_function_servers(self):
         budget_dir = os.path.join(self.working_dir, 'budget')
-        budget_cls =  BudgetApplyServer if not self.is_multi_process \
+        budget_cls = BudgetApplyServer if not self.is_multi_process \
                         else self.manager.budget_server
         self.budget_server = budget_cls(budget_dir, self.settings, 
                                         None, self.job_name)
@@ -264,8 +266,7 @@ class Job(object):
     def run(self, block=False):
         self.init()
         try:
-            self.processes = run_containers(
-                self.n_containers, self.n_instances, self.working_dir, 
+            self.processes = run_containers(self.n_containers, self.n_instances, self.working_dir, 
                 self.job_def_path, self.job_name, self.ctx.env, self.mq,
                 self.counter_arg, self.budget_arg, self.speed_arg, 
                 self.stopped, self.nonsuspend, self.idle_statuses, 

@@ -24,7 +24,7 @@ def labelize(obj):
     if isinstance(obj, str):
         return obj
     elif isinstance(obj, unicode):
-        return unicode.encode('utf-8')
+        return obj.encode('utf-8','ignore')
     else:
         try:
             return str(obj)

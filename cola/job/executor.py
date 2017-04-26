@@ -302,8 +302,6 @@ class UrlExecutor(Executor):
     def __init__(self, *args, **kwargs):
         super(UrlExecutor, self).__init__(*args, **kwargs)
         self.budges = 0
-        self.url_error_times = {}
-
     
     def _parse(self, parser_cls, options, url):
         if hasattr(self, 'content'):
@@ -324,7 +322,7 @@ class UrlExecutor(Executor):
             self.logger.error('Error when handle url: %s' % (str(url)))
             self.logger.exception(e)
 
-        self.url_error_times[url] = self.url_error_times.get(url, 0) + 1
+        url.error_times = getattr(url, 'error_times', 0) + 1
             
         self.counter_client.local_inc(self.ip, self.id_, 
                                       'error_urls', 1)
@@ -336,7 +334,7 @@ class UrlExecutor(Executor):
         
         self._log_error(url, e)
         retries, span, ignore = self._get_handle_error_params(e)
-        if self.url_error_times.get(url, 0) <= retries:
+        if url.error_times <= retries:
             self.stopped.wait(span)
             return
         
@@ -415,7 +413,6 @@ class UrlExecutor(Executor):
             try:
                 next_urls = self._parse_with_process_exception(parser_cls, options, url)
                 next_urls = list(self.job_desc.url_patterns.matches(next_urls))
-                
                 if next_urls:
                     self.mq.put(next_urls)
                     # inc budget if auto budget enabled

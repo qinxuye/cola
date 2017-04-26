@@ -176,7 +176,7 @@ class Job(object):
         
         base = 1 if not self.is_bundle else 1000
         size = self.job_desc.settings.job.size
-        if isinstance(size,basestring):
+        if isinstance(size, basestring):
             size = len(self.job_desc.settings.job.starts) * 10
         capacity = UNLIMIT_BLOOM_FILTER_CAPACITY
         if size > 0:

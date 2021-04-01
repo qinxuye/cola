@@ -35,6 +35,7 @@ FUNC_PREFIX = "budget_apply_"
 SUFFICIENT, NOAPPLIED, ALLFINISHED = range(3)
 DEFAULT_BUDGETS = 3
 BUDGET_APPLY_STATUS_FILENAME = 'budget.apply.status'
+AUTO_BUDGET = 'auto'
 
 def synchronized(func):
     def inner(self, *args, **kw):
@@ -50,8 +51,11 @@ class BudgetApplyServer(object):
         self.settings = settings
         self.rpc_server = rpc_server
         self.app_name = app_name
-        
-        self.budgets = settings.job.size
+        # check if auto budget setting enabled
+        if settings.job.size == AUTO_BUDGET:
+            self.budgets = len(settings.job.starts)
+        else:
+            self.budgets = settings.job.size
         self.limit = self.budgets >= 0
         self.applied = 0
         self.finished = 0
@@ -178,11 +182,11 @@ class BudgetApplyClient(object):
     def error(self, size=1):
         return self._call('error', size)
     
-    def set_budget(self, budget):
-        return self._call('set_budget', budget)
+    def set_budgets(self, budget):
+        return self._call('set_budgets', budget)
     
-    def inc_budget(self, budget):
-        return self._call('inc_budget', budget)
+    def inc_budgets(self, budget):
+        return self._call('inc_budgets', budget)
     
-    def dec_budget(self, budget):
-        return self._call('dec_budget', budget)
+    def dec_budgets(self, budget):
+        return self._call('dec_budgets', budget)

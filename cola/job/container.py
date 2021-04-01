@@ -31,6 +31,8 @@ from cola.functions.budget import BudgetApplyClient
 from cola.functions.speed import SpeedControlClient
 from cola.functions.counter import CounterClient
 
+MAX_IDLE_TIMES = 5
+
 class Container(object):
     def __init__(self, container_id, working_dir, 
                  job_path, job_name, env, mq,
@@ -125,9 +127,16 @@ class Container(object):
         
     def _init_idle_status_checker(self):
         def check():
+            idle_times = 0
             while not self.stopped.is_set():
                 self.idle_statuses[self.container_id] = \
                     all([task.is_idle() for task in self.tasks])
+                if  self.idle_statuses[self.container_id]:
+                    idle_times += 1
+                    if self.job_desc.settings.job.size=='auto' and idle_times > MAX_IDLE_TIMES:
+                        break
+                else:
+                    idle_times = 0
                 self.stopped.wait(5)
         self.check_idle_t = threading.Thread(target=check)
             

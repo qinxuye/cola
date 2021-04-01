@@ -71,8 +71,7 @@ class Executor(object):
                  is_local=False, env=None, logger=None):
         self.id_ = id_
         self.job_desc = job_desc
-        self.opener = job_desc.opener_cls(
-            timeout=DEFAULT_OPENER_TIMEOUT)
+        self.opener = job_desc.opener_cls(timeout=DEFAULT_OPENER_TIMEOUT)
         self.mq = mq
         self.dir_ = working_dir
         self.settings = job_desc.settings
@@ -116,8 +115,7 @@ class Executor(object):
                 for p in proxies:
                     proxy_type = p.type if p.has('type') else 'all'
                     if p.has('addr'):
-                        self.opener.add_proxy(
-                            p.addr, 
+                        self.opener.add_proxy(p.addr, 
                             proxy_type=proxy_type,
                             user=p.user if p.has('user') else None,
                             password=p.password if p.has('password') else None)
@@ -210,7 +208,7 @@ class Executor(object):
             
         msg_filename = os.path.join(path, ERROR_MSG_FILENAME)
         with open(msg_filename, 'w') as f:
-            f.write(msg+'\n')
+            f.write(msg + '\n')
             traceback.print_exc(file=f)
             
         content_filename = os.path.join(path, 
@@ -314,7 +312,10 @@ class UrlExecutor(Executor):
                          counter=ExecutorCounter(self),
                          settings=ReadOnlySettings(self.settings),
                          **options).parse()
-        return list(res)
+        if res:
+            return list(res)
+        else:
+            return list()
     
     def _log_error(self, url, e):
         if self.logger:
@@ -350,6 +351,7 @@ class UrlExecutor(Executor):
             self._error()
             raise UnitRetryFailed
 
+
     def _clear_error(self, url):
         if hasattr(url, 'error_times'):
             del url.error_times
@@ -364,7 +366,7 @@ class UrlExecutor(Executor):
             kw = {'pages': 1, 'secs': t}
             self.counter_client.multi_local_inc(self.ip, self.id_, **kw)
             self.counter_client.multi_global_inc(**kw)
-            
+
             self._clear_error(url)
             self._recover_normal()
             
@@ -383,7 +385,7 @@ class UrlExecutor(Executor):
         except Exception, e:
             self._handle_error(url, e)
             
-        return [url, ]
+        return [url,]
     
     def execute(self, url, is_inc=False):
         failed = False
@@ -402,20 +404,22 @@ class UrlExecutor(Executor):
         parser_cls, options = self.job_desc.url_patterns.get_parser(url, options=True)
         if parser_cls is not None:
             if rates == 0:
-                rates, span = self.speed_client.require(
-                    DEFAULT_SPEEED_REQUIRE_SIZE)
+                rates, span = self.speed_client.require(DEFAULT_SPEEED_REQUIRE_SIZE)
             if rates == 0:
                 if self.stopped.wait(5):
                     return
             rates -= 1
             
             try:
-                next_urls = self._parse_with_process_exception(
-                    parser_cls, options, url)
+                next_urls = self._parse_with_process_exception(parser_cls, options, url)
                 next_urls = list(self.job_desc.url_patterns.matches(next_urls))
-                
                 if next_urls:
                     self.mq.put(next_urls)
+                    # inc budget if auto budget enabled
+                    if self.settings.job.size == 'auto':
+                        inc_budgets = len(next_urls)
+                        if inc_budgets > 0:
+                            self.budget_client.inc_budgets(inc_budgets)
                 if hasattr(self.opener, 'close'):
                     self.opener.close()
                     
@@ -458,8 +462,7 @@ class BundleExecutor(Executor):
         
     def _log_error(self, bundle, url, e):
         if self.logger:
-            self.logger.error('Error when handle bundle: %s, url: %s' % (
-                str(bundle), str(url)))
+            self.logger.error('Error when handle bundle: %s, url: %s' % (str(bundle), str(url)))
             self.logger.exception(e)
         if url == getattr(bundle, 'error_url', None):
             bundle.error_times = getattr(bundle, 'error_times', 0) + 1
@@ -499,6 +502,9 @@ class BundleExecutor(Executor):
                 
             if ignore:
                 bundle.error_urls.append(url)
+                # dec budget if auto budget enabled
+                if self.settings.job.size == 'auto':
+                    self.budget_client.dec_budgets(1)
                 return
             else:
                 bundle.current_urls.insert(0, url)
@@ -525,6 +531,7 @@ class BundleExecutor(Executor):
             self.counter_client.multi_local_inc(self.ip, self.id_, **kw)
             self.counter_client.multi_global_inc(**kw)
             
+
             self._clear_error(bundle)
             self._recover_normal()
             
@@ -543,7 +550,7 @@ class BundleExecutor(Executor):
         except Exception, e:
             self._handle_error(bundle, url, e)
             
-        return [url, ], []
+        return [url,], []
         
     def execute(self, bundle, max_sec, is_inc=False):
         failed = False
@@ -565,8 +572,7 @@ class BundleExecutor(Executor):
             
             url = bundle.current_urls.pop(0)
             if self.logger:
-                self.logger.debug('get %s url: %s' % 
-                                    (bundle.label, url))
+                self.logger.debug('get %s url: %s' % (bundle.label, url))
             
             rates = 0
             span = 0.0
@@ -574,16 +580,14 @@ class BundleExecutor(Executor):
                                                                         options=True)
             if parser_cls is not None:
                 if rates == 0:
-                    rates, span = self.speed_client.require(
-                        DEFAULT_SPEEED_REQUIRE_SIZE)
+                    rates, span = self.speed_client.require(DEFAULT_SPEEED_REQUIRE_SIZE)
                 if rates == 0:
                     if self.stopped.wait(5):
                         break
                 rates -= 1
                 
                 try:
-                    next_urls, bundles = self._parse_with_process_exception(
-                        parser_cls, options, bundle, url)
+                    next_urls, bundles = self._parse_with_process_exception(parser_cls, options, bundle, url)
                     next_urls = list(self.job_desc.url_patterns.matches(next_urls))
                     next_urls.extend(bundle.current_urls)
                     if self.shuffle_urls:
@@ -597,6 +601,12 @@ class BundleExecutor(Executor):
                     
                     if bundles:
                         self.mq.put(bundles)
+                        # inc budget if auto budget enabled
+                        if self.settings.job.size == 'auto':
+                            inc_budgets = len(bundles)
+                            if inc_budgets > 0:
+                                self.budget_client.inc_budgets(inc_budgets)
+
                     if hasattr(self.opener, 'close'):
                         self.opener.close()
                         

@@ -222,7 +222,7 @@ class Master(object):
                         for job in self.job_tracker.running_jobs:
                             self.job_tracker.remove_worker(job, worker)
                         
-                # if continously connect for more than 10 min
+                # if continuously connect for more than 10 min
                 elif info.continous_register >= CONTINOUS_HEARTBEAT:
                     if info.status != RUNNING:
                         info.status = RUNNING

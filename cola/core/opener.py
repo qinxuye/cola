@@ -129,7 +129,7 @@ class MechanizeOpener(Opener):
     def open(self, url, data=None, timeout=None):
         # check if gzip by
         # br.response().info().dict.get('content-encoding') == 'gzip'
-        # experimently add `self.br.set_handle_gzip(True)` to handle
+        # experimentally add `self.br.set_handle_gzip(True)` to handle
         self._clear_content()
         if timeout is None:
             timeout = self._default_timout
